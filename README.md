@@ -9,7 +9,7 @@ A free WhatsApp lead inbox, CRM and automation builder for a small team that tak
 - Message templates (including image, video and document headers) and no-code automations with a dry run and a shadow mode.
 - Web push notifications on any phone once the app is installed.
 - One WhatsApp number per deployment, by design. Deploy again for another number.
-- Built to run on the Cloudflare Workers Free plan: one Worker, one D1 database, an optional R2 bucket for media.
+- Built to run on the Cloudflare Workers Free plan: one Worker, one D1 database, one Durable Object for the live inbox, an optional R2 bucket for media.
 - Your data stays in your Cloudflare account. No telemetry, no phone-home. Apache-2.0.
 - Connect your WhatsApp number through WhaBuzz in one click (Settings, WhatsApp, "Connect with WhaBuzz"), or bring your own Meta Cloud API app.
 - One number, one team, self-hosted: WhaLeads. Many numbers or many clients: use WhaBuzz directly.
