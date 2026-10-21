@@ -4,7 +4,7 @@ WhaLeads is one Cloudflare Worker with a D1 database, an R2 bucket for media, on
 
 ## Option 1: the Deploy to Cloudflare button
 
-Use the button in the [README](../README.md). It:
+Check the "Before you press it" list in the [README](../README.md) first: a `workers.dev` subdomain picked, R2 enabled, a GitHub or GitLab account, a saved session secret. Then use the button. It:
 
 1. copies this repository into your GitHub or GitLab account (the repository must be public for the button to work);
 2. reads `wrangler.jsonc` and creates the D1 database (`whaleads-db`) and the R2 bucket (`whaleads-media`) in your account, and the Durable Object class from the `v1-live` migration;
