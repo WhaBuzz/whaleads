@@ -11,7 +11,7 @@ import { useLoad } from '@/lib/useLoad'
 
 type Day = { open: string; close: string } | null
 type Hours = Record<string, Day>
-interface Resp { settings: { business_name: string; default_country: string | null; timezone: string; working_hours: Hours | null }; sources: Record<string, string> }
+interface Resp { settings: { business_name: string; default_country: string | null; timezone: string; working_hours: Hours | null; broadcast_per_minute?: number }; sources: Record<string, string> }
 const DAYS = [['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'], ['fri', 'Friday'], ['sat', 'Saturday'], ['sun', 'Sunday']] as const
 
 function Form({ data, reloadMe }: { data: Resp; reloadMe: () => void }) {
@@ -20,15 +20,19 @@ function Form({ data, reloadMe }: { data: Resp; reloadMe: () => void }) {
   const [country, setCountry] = useState(s.default_country ?? '')
   const [tz, setTz] = useState(s.timezone)
   const [hours, setHours] = useState<Hours>(() => Object.fromEntries(DAYS.map(([k]) => [k, s.working_hours?.[k] ?? null])))
+  const [pace, setPace] = useState(String(s.broadcast_per_minute ?? 20))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(''); const [ok, setOk] = useState('')
   const zones = useMemo(() => timezoneList(tz), [tz])
   const setDay = (k: string, d: Day) => setHours({ ...hours, [k]: d })
 
   async function save(e: FormEvent) {
-    e.preventDefault(); setBusy(true); setErr(''); setOk('')
+    e.preventDefault(); setErr(''); setOk('')
+    const perMin = Number(pace)
+    if (!Number.isInteger(perMin) || perMin < 1 || perMin > 40) { setErr('Broadcast pace must be a whole number from 1 to 40.'); return }
+    setBusy(true)
     try {
-      await api('/api/settings', { method: 'PATCH', body: { business_name: name, default_country: country || null, timezone: tz, working_hours: hours } })
+      await api('/api/settings', { method: 'PATCH', body: { business_name: name, default_country: country || null, timezone: tz, working_hours: hours, broadcast_per_minute: perMin } })
       setOk('Saved.'); reloadMe()
     } catch (x) { setErr((x as Error).message) } finally { setBusy(false) }
   }
@@ -59,6 +63,9 @@ function Form({ data, reloadMe }: { data: Resp; reloadMe: () => void }) {
             )
           })}
         </ul>
+      </Card>
+      <Card title="Broadcasts">
+        <Field id="broadcast_per_minute" label="Messages per minute" type="number" inputMode="numeric" min={1} max={40} value={pace} onChange={(e) => setPace(e.target.value)} hint="How fast a broadcast sends, 1 to 40. A slower pace is gentler on your number's quality rating." />
       </Card>
       <div className="flex items-center gap-3"><Button type="submit" loading={busy}>Save changes</Button><FormMsg error={err} ok={ok} /></div>
     </form>

@@ -15,7 +15,16 @@ export const ROUTE_LIMITS: Rule[] = [
   { bucket: 'pushtest', method: 'POST', re: /^\/api\/push\/test$/, limit: 5, windowSec: 60 },
   { bucket: 'pushsub', method: 'POST', re: /^\/api\/push\/(subscribe|unsubscribe)$/, limit: 30, windowSec: 60 },
   { bucket: 'tplcreate', method: 'POST', re: /^\/api\/templates$/, limit: 20, windowSec: 3600 },
+  // per caller; the bearer is one caller, so this is the deployment-wide cap. The 5 per destination per 10 min lives in otp.ts.
+  { bucket: 'otp', method: 'POST', re: /^\/api\/send-otp$/, limit: 30, windowSec: 60 },
   { bucket: 'tplsync', method: 'POST', re: /^\/api\/templates\/sync$/, limit: 10, windowSec: 60 },
+  // Broadcasts: reads are generous (the progress screen polls), previews walk the lead tables, writes are admin clicks.
+  { bucket: 'bcread', method: 'GET', re: /^\/api\/broadcasts(\/bc_[0-9a-f]{16}(\/recipients)?)?$/, limit: 240, windowSec: 60 },
+  { bucket: 'bcpreview', method: 'POST', re: /^\/api\/broadcasts\/preview$/, limit: 30, windowSec: 60 },
+  { bucket: 'bcwrite', method: 'POST', re: /^\/api\/broadcasts(\/bc_[0-9a-f]{16}\/(start|pause|resume|cancel|requeue-unknown))?$/, limit: 30, windowSec: 60 },
+  { bucket: 'bcwrite', method: 'PATCH', re: /^\/api\/broadcasts\/bc_[0-9a-f]{16}$/, limit: 30, windowSec: 60 },
+  { bucket: 'bcwrite', method: 'DELETE', re: /^\/api\/broadcasts\/bc_[0-9a-f]{16}$/, limit: 30, windowSec: 60 },
+  { bucket: 'optout', method: 'PATCH', re: /^\/api\/contacts\/\d+\/opt-out$/, limit: 60, windowSec: 60 },
   { bucket: 'export', method: 'GET', re: /^\/api\/export\/(leads\.csv|full\.json)$/, limit: 10, windowSec: 3600 },
   { bucket: 'import', method: 'POST', re: /^\/api\/import\/leads$/, limit: 30, windowSec: 60 },
   { bucket: 'importcommit', method: 'POST', re: /^\/api\/import\/leads\/commit$/, limit: 120, windowSec: 60 },
@@ -35,7 +44,7 @@ export function startRouteLimit(req: Request, env: Env, path: string): Promise<R
   return (async () => {
     const who = await limitIdentity(req, env)
     if (!who || !(await hit(env.DB, `rl:${rule.bucket}:${who}`, rule.limit, rule.windowSec))) return null
-    return new Response(JSON.stringify({ ok: false, error: 'rate_limited', retry_after: rule.windowSec }), {
+    return new Response(JSON.stringify({ ok: false, error: 'rate_limited', limit: rule.bucket, retry_after: rule.windowSec }), {
       status: 429, headers: { 'content-type': 'application/json', 'retry-after': String(rule.windowSec), 'cache-control': 'no-store' },
     })
   })()

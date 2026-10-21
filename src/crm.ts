@@ -27,7 +27,7 @@ export function parseCursor(s: string | null): [number, number] | null | 'bad' {
 export const LEAD_COLS = `l.id, l.contact_id, l.source, l.status, l.message, l.created_at, l.updated_at, l.assigned_to,
   l.next_action_at, l.lost_reason, l.won_at, l.closed_at, l.first_response_at, l.last_activity_at, l.ctwa_clid, l.ad_source_id,
   l.page, l.utm_source, l.utm_medium, l.utm_campaign, l.gclid, l.external_id, l.attribution,
-  c.name, c.phone, c.email, c.wa_id, o.name AS assigned_name, s.label AS stage_label, s.kind AS stage_kind`
+  c.name, c.phone, c.email, c.wa_id, c.opted_out_at, c.opt_out_source, o.name AS assigned_name, s.label AS stage_label, s.kind AS stage_kind`
 export const LEAD_FROM = `leads l JOIN contacts c ON c.id = l.contact_id LEFT JOIN staff o ON o.id = l.assigned_to LEFT JOIN stages s ON s.key = l.status`
 
 export interface TagRef { id: number; label: string; color: string }

@@ -20,6 +20,7 @@ import { handleTemplates } from './routes/templates'
 import { handleMedia } from './routes/media'
 import { runCron } from './cron' // media jobs + flow tick
 import { handleLive } from './routes/live' // D20
+import { handleBroadcasts } from './routes/broadcasts'
 import { handleFlows } from './routes/flows'
 import { handleLeads } from './routes/leads'
 import { handleContacts } from './routes/contacts'
@@ -114,7 +115,9 @@ async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
       // before the CRM handlers, so /api/leads/:id/flow-runs is not swallowed by handleLeads
       const flowRes = await handleFlows(req, env, ctx, path, actor, url)
       if (flowRes) return done(flowRes)
-      const crmRes = (await handleLeads(req, env, ctx, path, actor, url)) ?? (await handleContacts(req, env, path, actor, url)) ?? (await handleToday(req, env, path, actor))
+      const bcRes = await handleBroadcasts(req, env, ctx, path, actor, url)
+      if (bcRes) return done(bcRes)
+      const crmRes = (await handleLeads(req, env, ctx, path, actor, url)) ?? (await handleContacts(req, env, path, actor, url, ctx)) ?? (await handleToday(req, env, path, actor))
       if (crmRes) return done(crmRes)
       const reportRes = (await handleReports(req, env, path, actor, url)) ?? (await handleExport(req, env, ctx, path, actor, url))
       if (reportRes) return done(reportRes)

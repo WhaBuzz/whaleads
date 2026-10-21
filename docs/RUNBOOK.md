@@ -29,11 +29,27 @@ The first request after deploying the inbox release runs migration v4 as a singl
 
 **Sending.** Text and media go out through the active adaptor (`sendText`, `sendMedia`; media is a two-step upload then send on both WhaBuzz and the Cloud API). Provider errors are passed through untouched. The composer disables free text when the 24h window is closed and shows a banner; the template picker takes over.
 
+**Broadcast sends.** Queued broadcast messages are written like any outbound message but are paced by the cron, so the live inbox shows them as they go and the send counters under-report until the tick commits.
+
 **Inbound media.** The webhook stores a `media` row in the same D1 batch as the message (`pending`), then copies the file from the provider into R2 at key `m/<message id>` (`stored`). Files over 25 MB become `too_large` and are not copied. A failed copy stays `pending` and is retried by the 15-minute cron jobs (minutes divisible by 15, at most 10 rows per run); after 5 attempts the row becomes `failed`. The thread shows "only on the phone" for `failed` and `too_large`. The same cron deletes expired sessions and rate-limit rows.
 
 **R2 binding.** `wrangler.jsonc` declares `r2_buckets: [{ binding: "MEDIA", bucket_name: "whaleads-media" }]`; create the bucket before deploying (`wrangler r2 bucket create whaleads-media`). **Without the binding** inbound rows stay `pending`, the cron skips them, and `GET /api/media/:id` proxies the file live from the provider each time (nothing is kept, so it stops working when the provider's copy expires). Outbound media rows are then marked `failed` with `r2_unbound`.
 
 **Local mock.** `WHABUZZ_BASE_URL` may be an `http://127.0.0.1` or `localhost` address for local mock servers (used by the e2e); anything else must be https on whabuzz.com.
+
+## Broadcasts
+
+**What it is.** One approved template sent to the leads carrying chosen tags (optionally one stage). One message per contact, however many leads they have. "All contacts" needs the explicit `all` flag and a typed confirmation of the audience count. One broadcast runs at a time; a second `start` is refused until the first finishes or is cancelled.
+
+**Pacing.** The existing every-minute cron sends a slice of the queue after the flow tick. `broadcast_per_minute` (Settings, 1 to 40, default 20) is a ceiling, not a promise: on the Workers Free plan one invocation allows 50 subrequests, each send costs two (the WhatsApp call and one D1 batch), and the step reserves six calls for the cron's own bookkeeping, so about 16 sends fit in an idle tick and about 11 when a flow tick also runs. Flows and media jobs share that budget and win when busy, and on quarter-hour firings the step leaves room for the other jobs. A 1,000 contact broadcast therefore takes roughly an hour. The Free plan CPU limit (10 ms per invocation) is a risk for large ticks; if ticks start failing, lower `broadcast_per_minute` or move to the Paid plan.
+
+**Opt-outs.** Honoured at preview, at start, and again before every message. A contact opts out by sending a whole-message keyword (stop, stop all, unsubscribe, opt out, optout, stop messages, no more, band karo, band; case and trailing punctuation ignored; start or subscribe opts back in, but only undoes a keyword opt-out), when Meta returns 131050 (the user stopped marketing messages), or by staff (`PATCH /api/contacts/:id/opt-out`). Opted-out contacts still receive one-to-one replies; only broadcasts skip them.
+
+**Automatic pauses.** The broadcast pauses itself, with the reason on the broadcast, on account-level errors: template paused, disabled or not approved, quality or ecosystem limits (131048, 132000 to 132016, 131042, 131031, 133010), and bad credentials (368, 190, HTTP 401). Fix the cause, then Resume. Throttling (130429, 4, 80007, HTTP 429) stops the tick and retries with backoff, up to 3 attempts per recipient. Recipient-level errors (131026, 131049, 131009, 131008, 131021) mark only that recipient failed.
+
+**Unknown recipients.** If a send times out or a worker dies mid-send, the recipient is `unknown`, never retried automatically, because the message may already have gone out. Check the chat, then use Requeue unknown only for people who did not receive it.
+
+**Counters and receipts.** Delivered and read counts come from status webhooks matched by message id. A receipt that arrives before the recipient's own `sent` write finishes is not counted (the message row still updates), so delivered and read can under-count by a few. Use the recipient list as the source of truth.
 
 ## Templates
 
@@ -51,11 +67,20 @@ Schema v6 adds `templates` (unique on name + language; the upgrade is additive a
 
 All sit behind the session gate; state changes need the CSRF header.
 
-**Meta rules enforced** (`src/templateRules.ts`, shared with the form): name `[a-z0-9_]` up to 512; language like `en` or `en_US`; category UTILITY or MARKETING; body up to 1024 characters; up to 10 variables numbered `{{1}}`.. with no gaps and a sample for each; a body that starts or ends with a variable is a warning; footer up to 60 with no variables; text header up to 60 with at most one variable and a sample; media headers need a sample file. Send values may not be empty, hold line breaks or tabs, or run 4+ spaces. Provider errors pass through verbatim; known Meta subcodes (for example 2388293, too many variables for the body length) also get a `field` and a `hint`.
+**Meta rules enforced** (`src/templateRules.ts`, shared with the form): name `[a-z0-9_]` up to 512; language like `en` or `en_US`; category UTILITY, MARKETING or AUTHENTICATION (below); body up to 1024 characters; up to 10 variables numbered `{{1}}`.. with no gaps and a sample for each; a body that starts or ends with a variable is a warning; footer up to 60 with no variables; text header up to 60 with at most one variable and a sample; media headers need a sample file. Send values may not be empty, hold line breaks or tabs, or run 4+ spaces. Provider errors pass through verbatim; known Meta subcodes (for example 2388293, too many variables for the body length) also get a `field` and a `hint`.
 
 **Media-handle flow.** A header sample is uploaded first and the returned handle goes in `example.header_handle`. WhaBuzz: `POST /templates/media-handle` (multipart `file`, `type`) returns `{h}`. Cloud API: `POST /{app_id}/uploads` opens a session, then the bytes go to `POST /{session}` with `Authorization: OAuth <token>` and `file_offset: 0` (needs `app_id` in the config). The sample is also kept in R2 at `t/<uuid>` and is the default header when sending.
 
 **Sending.** Parameter counts must match the template (400 with `field`). Header media comes from the template default, a recent stored file (`header_message_id`) or a fresh upload; it is uploaded to the provider and referenced by `id`. The stored message is type `template` with the rendered text, and reuses the existing deferred-record path, so the response shape, optimistic bubble and live publish match text and media sends.
+
+**Authentication templates (one-time codes).** Meta writes the body ("{{1}} is your verification code."), so the form only asks for three options: the security note, a code expiry of 1 to 90 minutes (a footer line) and the copy-code button text (up to 25 characters). One-tap and zero-tap buttons need a signed Android app and are not offered. These templates are never sendable from the inbox composer, a flow or a broadcast; the list shows them as "Sent by API only". The one send path is `POST /api/send-otp` with the `ADMIN_KEY` bearer, called from your own backend:
+
+- Limits: 30 per minute for the whole deployment and 5 per destination number per 10 minutes. A burst past either gets 429 with `limit` saying which.
+- An unknown number creates no contact and no lead. A known contact shows a `[one-time code]` row in the thread. The code itself is never stored, logged or put in an event.
+- Meta bills authentication messages per message and may reject a code sent to a number that is not on WhatsApp. The error comes back verbatim.
+- The `ADMIN_KEY` also opens the staff API. Keep it on the server and rotate it with `wrangler secret put ADMIN_KEY` if it leaks.
+
+**Management.** The list filters by category, status and language and shows Meta's quality rating on approved templates (GREEN, YELLOW, RED; pending until Meta has data). A rejected template shows Meta's reason with a plain-words hint and a "Fix and resubmit" button that opens Create pre-filled under a new name (`_v2`); "Duplicate" does the same for any template. Samples and media are not kept, so they are entered again. PAUSED and DISABLED templates explain what they mean. Delete asks for confirmation in a dialog and is refused (409 `template_in_use`) while a draft, queued, running or paused broadcast still uses the template.
 
 **Cron.** The scheduled handler syncs templates hourly, and only while some template is PENDING (a PENDING row with no sync, or one older than 55 minutes). With none pending it makes no provider call.
 

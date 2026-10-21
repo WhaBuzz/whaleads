@@ -13,6 +13,7 @@ import { dayLabel, displayName, mergePoll, settleSend, showPhone, untilClose, ty
 import { usePoller } from '@/lib/poll'
 import type { TemplateJob } from '@/lib/templates'
 import { useUnread } from '@/lib/unread'
+import { OptOutControl } from '@/components/broadcasts/parts'
 import { Composer } from './Composer'
 import { MessageBubble } from './MessageBubble'
 
@@ -242,6 +243,7 @@ export function ThreadView({ contactId, onChanged }: { contactId: number; onChan
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-base font-bold">{displayName(t.contact)}</h1>
           <p className="truncate text-xs text-muted-foreground">{showPhone(t.contact.phone ?? t.contact.wa_id)}{conv?.assigned_name ? ` · ${conv.assigned_name}` : ''}</p>
+          <OptOutControl contactId={contactId} payload={t.contact} />
         </div>
         {conv?.status === 'closed' && <Badge>Closed</Badge>}
       </header>

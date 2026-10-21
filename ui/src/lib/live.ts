@@ -3,7 +3,7 @@
 // (connecting, blocked, server down) the normal 4 s / 10 s / 15 s polling carries everything. Polling is never removed.
 import { createContext, createElement, useContext, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 
-export type LiveEventType = 'message.new' | 'message.status' | 'conversation.update' | 'unread.total' | 'lead.new' | 'lead.update' | 'flow.run' | 'flow.updated'
+export type LiveEventType = 'message.new' | 'message.status' | 'conversation.update' | 'unread.total' | 'lead.new' | 'lead.update' | 'flow.run' | 'flow.updated' | 'broadcast.progress'
 export interface LiveEvent { type: LiveEventType; ts: number; data: any }
 /** `resync` is client-made: the socket just (re)opened, so anything published while it was down was missed. */
 export type LiveSignal = LiveEvent | { type: 'resync'; ts: number; data: null }

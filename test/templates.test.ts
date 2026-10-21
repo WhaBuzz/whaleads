@@ -7,7 +7,7 @@ import { WhaBuzzAdaptor } from '../src/adaptors/whabuzz'
 import { saveConfig } from '../src/adaptors'
 import { ensureSchema, type Env } from '../src/db'
 import { buildComponents, validateTemplate, type TemplateInput } from '../src/templateRules'
-import { syncPendingTemplates } from '../src/templates'
+import { normalizeRemote, syncPendingTemplates } from '../src/templates'
 import { fakeD1 } from './d1'
 import { fakeR2 } from './r2'
 
@@ -97,7 +97,7 @@ describe('validateTemplate', () => {
     ['dash in name', { name: 'order-update' }, 'name'],
     ['name over 512', { name: 'a'.repeat(513) }, 'name'],
     ['bad language', { language: 'english' }, 'language'],
-    ['bad category', { category: 'AUTHENTICATION' }, 'category'],
+    ['bad category', { category: 'PROMO' }, 'category'],
     ['empty body', { body: '  ' }, 'body'],
     ['body over 1024', { body: 'x'.repeat(1025), body_samples: [] }, 'body'],
     ['11 placeholders', { body: Array.from({ length: 11 }, (_, i) => `a {{${i + 1}}}`).join(' ') + ' end', body_samples: Array(11).fill('x') }, 'body'],
@@ -166,7 +166,7 @@ describe('adaptor request shapes (mocked fetch)', () => {
   })
   it('Cloud API list asks for id, components and rejected_reason', async () => {
     await ca().templates.list()
-    expect(calls[0]!.url).toMatch(/fields=id,name,status,category,language,rejected_reason,components&limit=100/)
+    expect(calls[0]!.url).toMatch(/fields=id,name,status,category,language,rejected_reason,quality_score,components&limit=100/)
   })
   it('Cloud API delete by name (+ hsm_id)', async () => {
     await ca().templates.delete({ name: 'order_update', id: '999' })
@@ -467,5 +467,87 @@ describe('templates review fixes', () => {
   })
   it('a normal positional template stays sendable', async () => {
     seedTemplate(); expect((await J(await call('GET', '/api/templates'))).templates[0]).toMatchObject({ sendable: true, unsendable_reason: null })
+  })
+})
+
+// ---- S9a: authentication create, buttons, quality, delete guard -----------------------------------
+describe('S9a template management', () => {
+  const wb = () => new WhaBuzzAdaptor(WB.config, fetch as any, 'https://api.whabuzz.com/v1')
+  const ca = () => new CloudApiAdaptor({ system_token: 'tok', app_secret: 's', phone_number_id: '111', waba_id: '222', app_id: '333' }, fetch as any)
+  const btn = [{ index: 0, sub_type: 'url' as const, text: '123456' }]
+  const expectBtn = { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: '123456' }] }
+
+  for (const [label, mk] of [['WhaBuzz', wb], ['Cloud API', ca]] as const) {
+    it(`${label} sendTemplate serialises a button component after the body`, async () => {
+      await mk().sendTemplate('1', 'login_code', 'en', ['123456'], undefined, btn)
+      expect(calls[0]!.body.template.components).toEqual([{ type: 'body', parameters: [{ type: 'text', text: '123456' }] }, expectBtn])
+    })
+  }
+
+  it('create route: AUTHENTICATION posts the Meta auth components and stores the row', async () => {
+    route = () => ({ json: { id: 'tpl_a', status: 'PENDING', category: 'AUTHENTICATION' } })
+    const r = await call('POST', '/api/templates', { name: 'login_code', language: 'en', category: 'AUTHENTICATION', auth: { security_note: true, expiry_minutes: 5 } })
+    expect(r.status).toBe(200)
+    expect(calls[0]!.body.components).toEqual([
+      { type: 'BODY', add_security_recommendation: true },
+      { type: 'FOOTER', code_expiration_minutes: 5 },
+      { type: 'BUTTONS', buttons: [{ type: 'OTP', otp_type: 'COPY_CODE' }] },
+    ])
+    expect(q(`SELECT category, status FROM templates WHERE name='login_code'`)).toMatchObject({ category: 'AUTHENTICATION', status: 'PENDING' })
+  })
+  it('create route: bad expiry and ONE_TAP are 400 with field auth, and nothing goes upstream', async () => {
+    const b = { name: 'login_code', language: 'en', category: 'AUTHENTICATION' }
+    const r1 = await call('POST', '/api/templates', { ...b, auth: { expiry_minutes: 120 } })
+    expect(r1.status).toBe(400); expect((await J(r1)).field).toBe('auth')
+    expect((await call('POST', '/api/templates', { ...b, auth: { button_type: 'ONE_TAP' } })).status).toBe(400)
+    expect(calls).toEqual([])
+  })
+
+  it('create route: AUTHENTICATION with a custom body is 400 on field body, never silently dropped', async () => {
+    const r = await call('POST', '/api/templates', { name: 'login_code', language: 'en', category: 'AUTHENTICATION', body: 'Your code is {{1}}', auth: { security_note: true } })
+    expect(r.status).toBe(400); expect((await J(r)).field).toBe('body')
+    expect(calls).toEqual([])
+  })
+
+  it('an authentication template is never sendable from the inbox composer', async () => {
+    seedContact()
+    raw.prepare(`INSERT INTO templates (id,name,language,category,status,components,header_format,body_params_count,header_params_count,synced_at) VALUES ('ta','login_code','en','AUTHENTICATION','APPROVED',?,'NONE',1,0,?)`)
+      .run(JSON.stringify([{ type: 'BODY', text: '{{1}} is your code' }, { type: 'BUTTONS', buttons: [{ type: 'OTP', otp_type: 'COPY_CODE' }] }]), now())
+    const r = await call('POST', '/api/inbox/1/send-template', { template_id: 'ta', body_params: ['123456'] })
+    expect(r.status).toBe(422); expect((await J(r)).error).toBe('template_not_sendable')
+    expect(calls).toEqual([])
+  })
+
+  it('quality is read from the Graph object, the WhaBuzz meta_object, and a bare string; unknown values are null', () => {
+    const base = { name: 'a', language: 'en', status: 'APPROVED', components: [] }
+    expect(normalizeRemote({ ...base, quality_score: { score: 'GREEN', date: 1 } })!.quality).toBe('GREEN')
+    expect(normalizeRemote({ ...base, meta_object: { quality_score: { score: 'red' } } })!.quality).toBe('RED')
+    expect(normalizeRemote({ ...base, quality: 'YELLOW' })!.quality).toBe('YELLOW')
+    expect(normalizeRemote({ ...base, quality_score: { score: 'WEIRD' } })!.quality).toBeNull()
+    expect(normalizeRemote(base)!.quality).toBeNull()
+  })
+  it('quality shows up in the list JSON and survives a sync that does not carry it', async () => {
+    seedTemplate({ id: 'tq', name: 'q_one' })
+    raw.prepare(`UPDATE templates SET quality='GREEN' WHERE id='tq'`).run()
+    expect((await J(await call('GET', '/api/templates'))).templates[0].quality).toBe('GREEN')
+    route = () => ({ json: { data: [{ id: 'tq', name: 'q_one', language: 'en', status: 'APPROVED', category: 'UTILITY', components: [{ type: 'BODY', text: 'x' }] }] } })
+    await call('POST', '/api/templates/sync')
+    expect(q(`SELECT quality FROM templates WHERE id='tq'`).quality).toBe('GREEN')
+  })
+
+  it('delete is refused (409) while a draft, queued, running or paused broadcast uses the template, and allowed after it finishes', async () => {
+    seedTemplate({ id: 'tb', name: 'b_one' })
+    const ins = (status: string) => raw.prepare(`INSERT INTO broadcasts (id,name,template_id,template_name,language,category,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)`).run('bc_' + status, 'Spring ' + status, 'tb', 'b_one', 'en', 'UTILITY', status, now(), now())
+    for (const s of ['draft', 'queued', 'running', 'paused']) {
+      ins(s)
+      const r = await call('DELETE', '/api/templates/tb')
+      expect(r.status).toBe(409)
+      expect(await J(r)).toMatchObject({ error: 'template_in_use', broadcast_id: 'bc_' + s })
+      raw.prepare(`DELETE FROM broadcasts`).run()
+    }
+    expect(calls).toEqual([])
+    ins('finished')
+    route = () => ({ json: { success: true } })
+    expect((await call('DELETE', '/api/templates/tb')).status).toBe(200)
   })
 })

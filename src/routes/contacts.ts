@@ -4,6 +4,7 @@ import type { Actor } from '../auth'
 import type { Env } from '../db'
 import { json } from '../leads'
 import { readJson } from './auth'
+import { manualStmts, publishContact } from '../broadcasts/optout'
 import { Bad, attachTags, actorLabel, clampInt, escapeLike, LEAD_COLS, LEAD_FROM, nowSec, parseCursor } from '../crm'
 
 async function list(env: Env, url: URL): Promise<Response> {
@@ -22,7 +23,7 @@ async function list(env: Env, url: URL): Promise<Response> {
   }
   if (cur) { where.push('(c.last_seen_at < ? OR (c.last_seen_at = ? AND c.id < ?))'); args.push(cur[0], cur[0], cur[1]) }
   const { results } = await env.DB.prepare(
-    `SELECT c.id, c.name, c.phone, c.wa_id, c.email, c.source, c.first_seen_at, c.last_seen_at,
+    `SELECT c.id, c.name, c.phone, c.wa_id, c.email, c.source, c.first_seen_at, c.last_seen_at, c.opted_out_at,
             (SELECT COUNT(*) FROM leads l WHERE l.contact_id = c.id) AS lead_count,
             (SELECT l.id FROM leads l JOIN stages s ON s.key = l.status WHERE l.contact_id = c.id AND s.kind = 'open' ORDER BY l.created_at DESC LIMIT 1) AS open_lead_id,
             v.last_message_at, v.last_preview, v.unread_count
@@ -36,7 +37,7 @@ async function list(env: Env, url: URL): Promise<Response> {
 }
 
 async function detail(env: Env, id: number): Promise<Response> {
-  const contact = await env.DB.prepare(`SELECT id,name,phone,wa_id,email,source,first_seen_at,last_seen_at FROM contacts WHERE id=?`).bind(id).first()
+  const contact = await env.DB.prepare(`SELECT id,name,phone,wa_id,email,source,first_seen_at,last_seen_at,opted_out_at,opt_out_source FROM contacts WHERE id=?`).bind(id).first()
   if (!contact) return json({ ok: false, error: 'not found' }, 404)
   const { results } = await env.DB.prepare(`SELECT ${LEAD_COLS} FROM ${LEAD_FROM} WHERE l.contact_id=? ORDER BY l.created_at DESC, l.id DESC LIMIT 100`).bind(id).all<{ id: number }>()
   const conversation = await env.DB.prepare(
@@ -81,7 +82,21 @@ async function patch(req: Request, env: Env, actor: Actor | null, id: number): P
 }
 
 /** Returns null when the path is not a contacts route. `/api/contacts/:id/messages` belongs to the inbox. */
-export async function handleContacts(req: Request, env: Env, path: string, actor: Actor | null, url: URL): Promise<Response | null> {
+/** PATCH /api/contacts/:id/opt-out {opted_out: boolean}. Any staff member; the source is 'manual', so only staff can undo it. */
+async function setOptOut(req: Request, env: Env, ctx: ExecutionContext | undefined, actor: Actor | null, id: number): Promise<Response> {
+  const b = await readJson(req)
+  if (!b || typeof b.opted_out !== 'boolean') return json({ ok: false, error: 'opted_out must be true or false', field: 'opted_out' }, 400)
+  const c = await env.DB.prepare(`SELECT 1 AS ok FROM contacts WHERE id=?`).bind(id).first()
+  if (!c) return json({ ok: false, error: 'not found' }, 404)
+  const res = await env.DB.batch(manualStmts(env, id, b.opted_out, actorLabel(actor), nowSec()))
+  if ((res[0]?.meta.changes ?? 0) > 0) publishContact(env, ctx, id)
+  const row = await env.DB.prepare(`SELECT opted_out_at, opt_out_source FROM contacts WHERE id=?`).bind(id).first()
+  return json({ ok: true, ...row })
+}
+
+export async function handleContacts(req: Request, env: Env, path: string, actor: Actor | null, url: URL, ctx?: ExecutionContext): Promise<Response | null> {
+  const oo = path.match(/^\/api\/contacts\/(\d+)\/opt-out$/)
+  if (oo) return req.method === 'PATCH' ? setOptOut(req, env, ctx, actor, Number(oo[1])) : null
   if (path === '/api/contacts' && req.method === 'GET') return list(env, url)
   const m = path.match(/^\/api\/contacts\/(\d+)$/)
   if (!m) return null

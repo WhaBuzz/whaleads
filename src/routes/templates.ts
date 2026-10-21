@@ -12,6 +12,7 @@ import { MAX_UPLOAD_BODY, OUTBOUND_LIMITS, cleanMime, mediaHeaders, outboundKind
 import { sendTemplateToContact } from '../send'
 import { buildComponents, paramProblem, renderParams, validateTemplate, type HeaderFormat, type TemplateInput } from '../templateRules'
 import { mapMetaError, normalizeRemote, rowJson, safeComponents, sendability, templateHeaderOk, syncTemplates, upsertStatement, type TemplateRow } from '../templates'
+import { sendOtp } from '../otp'
 import { readJson } from './auth'
 
 const HEADER_ALLOWED: Record<string, string> = { IMAGE: 'a JPEG or PNG image', VIDEO: 'an MP4 video', DOCUMENT: 'a PDF' }
@@ -89,6 +90,18 @@ async function createRoute(req: Request, env: Env, actor: Actor | null): Promise
     header: { format, text: typeof h?.text === 'string' ? h.text : undefined, text_sample: typeof h?.text_sample === 'string' ? h.text_sample : undefined },
     has_media_sample: !!parsed.file,
   }
+  if (input.category === 'AUTHENTICATION') {
+    const a = d.auth && typeof d.auth === 'object' ? d.auth : {}
+    input.auth = {
+      security_note: a.security_note === true,
+      ...(a.expiry_minutes !== undefined && a.expiry_minutes !== null && a.expiry_minutes !== '' ? { expiry_minutes: Number(a.expiry_minutes) } : {}),
+      ...(typeof a.button_text === 'string' && a.button_text.trim() ? { button_text: a.button_text } : {}),
+      ...(typeof a.button_type === 'string' ? { button_type: a.button_type } : {}),
+    }
+    // Meta writes the body of an authentication template itself; a body the caller typed would be dropped silently.
+    if (input.body.trim()) return json({ ok: false, error: 'An authentication template has no custom body; Meta writes the code message.', field: 'body', errors: [{ field: 'body', message: 'An authentication template has no custom body; Meta writes the code message.' }] }, 400)
+    input.body = ''
+  }
   const v = validateTemplate(input)
   if (v.errors.length) return json({ ok: false, error: v.errors[0]!.message, field: v.errors[0]!.field, errors: v.errors }, 400)
   let sample: { bytes: Uint8Array; mime: string; filename: string } | null = null
@@ -123,6 +136,9 @@ async function createRoute(req: Request, env: Env, actor: Actor | null): Promise
 async function deleteRoute(env: Env, id: string): Promise<Response> {
   const row = await env.DB.prepare(`SELECT * FROM templates WHERE id=?`).bind(id).first<TemplateRow>()
   if (!row) return json({ ok: false, error: 'not found' }, 404)
+  // A broadcast that has not finished still needs the template: refuse and say which one.
+  const live = await env.DB.prepare(`SELECT id, name FROM broadcasts WHERE template_id=? AND status IN ('draft','queued','running','paused') ORDER BY created_at LIMIT 1`).bind(id).first<{ id: string; name: string }>()
+  if (live) return json({ ok: false, error: 'template_in_use', message: `Broadcast "${live.name}" still uses this template. Finish or cancel it first.`, broadcast_id: live.id }, 409)
   const active = await resolveActive(env)
   if (!active) return json({ ok: false, error: 'no WhatsApp adaptor configured' }, 503)
   const r = await active.adaptor.templates.delete({ name: row.name, id: row.id.startsWith('local:') ? undefined : row.id })
@@ -207,9 +223,22 @@ async function sendTemplateRoute(req: Request, env: Env, id: number, ctx: Execut
   })
 }
 
+/** POST /api/send-otp. Bearer ADMIN_KEY only: a signed-in session (even an admin) gets 403. */
+async function sendOtpRoute(req: Request, env: Env, actor: Actor | null, ctx: ExecutionContext): Promise<Response> {
+  if (actor?.kind !== 'admin_key') return json({ ok: false, error: 'forbidden', message: 'One-time codes are sent with the ADMIN_KEY bearer only.' }, 403)
+  const b = await readJson(req)
+  if (!b || typeof b !== 'object') return json({ ok: false, error: 'invalid JSON' }, 400)
+  const out = await sendOtp(env, b as Record<string, any>, ctx)
+  if (out.ok) return json({ ok: true, wamid: out.wamid, queued: out.queued })
+  if (out.kind === 'bad_request') return json({ ok: false, error: out.error, message: out.message, field: out.field }, out.status)
+  if (out.kind === 'rate_limited') return new Response(JSON.stringify({ ok: false, error: 'rate_limited', limit: 'destination', retry_after: 600 }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '600', 'cache-control': 'no-store' } })
+  return upstreamFail(out.result, 'send')
+}
+
 export async function handleTemplates(req: Request, env: Env, ctx: ExecutionContext, path: string, actor: Actor | null, url: URL): Promise<Response | null> {
   const st = path.match(/^\/api\/inbox\/(\d+)\/send-template$/)
   if (st) return req.method === 'POST' ? sendTemplateRoute(req, env, Number(st[1]), ctx) : null
+  if (path === '/api/send-otp') return req.method === 'POST' ? sendOtpRoute(req, env, actor, ctx) : null
   if (path !== '/api/templates' && !path.startsWith('/api/templates/')) return null
   const admin = () => requireRole(actor, 'admin')
   if (path === '/api/templates') {

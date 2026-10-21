@@ -1,30 +1,40 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Card, FormMsg, SettingsPage } from '@/components/SettingsPage'
 import { WaCard } from '@/components/templates/WaCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { ApiError, api } from '@/lib/api'
-import type { HeaderFormat } from '@/lib/templates'
-import { placeholders, TEMPLATE_LIMITS, validateTemplate, type RuleIssue, type TemplateInput } from '../../../../src/templateRules'
+import type { HeaderFormat, Tpl } from '@/lib/templates'
+import { AUTH_BODY_PREVIEW, AUTH_LIMITS, AUTH_SECURITY_NOTE, placeholders, TEMPLATE_LIMITS, validateTemplate, type RuleIssue, type TemplateInput } from '../../../../src/templateRules'
 
 const area = 'mt-1 w-full rounded-md border bg-surface px-3 py-2 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent'
 const ACCEPT: Record<string, string> = { IMAGE: 'image/jpeg,image/png', VIDEO: 'video/mp4,video/3gpp', DOCUMENT: 'application/pdf' }
 
+/** "v2" suffix for a copy: Meta will not take a deleted or rejected name straight back. */
+const nextName = (n: string) => (/_v\d+$/.test(n) ? n.replace(/_v(\d+)$/, (_, d) => `_v${Number(d) + 1}`) : `${n}_v2`).slice(0, TEMPLATE_LIMITS.name)
+
 export default function TemplateCreate() {
   const nav = useNavigate()
-  const [name, setName] = useState('')
-  const [language, setLanguage] = useState('en')
-  const [category, setCategory] = useState('UTILITY')
-  const [format, setFormat] = useState<HeaderFormat>('NONE')
-  const [headerText, setHeaderText] = useState('')
+  const loc = useLocation()
+  const st = loc.state as { prefill?: Tpl; mode?: 'fix' | 'duplicate' } | null
+  const pre = st?.prefill
+  const [name, setName] = useState(pre ? nextName(pre.name) : '')
+  const [language, setLanguage] = useState(pre?.language ?? 'en')
+  const [category, setCategory] = useState(pre?.category ?? 'UTILITY')
+  const [format, setFormat] = useState<HeaderFormat>(pre?.header_format === 'TEXT' ? 'TEXT' : 'NONE') // media samples are never kept, so a media header must be re-attached
+  const [headerText, setHeaderText] = useState(pre?.header_format === 'TEXT' ? pre.header_text ?? '' : '')
   const [headerSample, setHeaderSample] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [fileUrl, setFileUrl] = useState<string | null>(null)
-  const [body, setBody] = useState('')
+  const [body, setBody] = useState(pre && pre.category !== 'AUTHENTICATION' ? pre.body : '')
   const [samples, setSamples] = useState<string[]>([])
-  const [footer, setFooter] = useState('')
+  const [footer, setFooter] = useState(pre && pre.category !== 'AUTHENTICATION' ? pre.footer ?? '' : '')
+  const [secNote, setSecNote] = useState(pre?.auth?.security_note ?? true)
+  const [expiry, setExpiry] = useState(pre?.auth?.expiry_minutes ? String(pre.auth.expiry_minutes) : '10')
+  const [btnText, setBtnText] = useState(pre?.auth?.button_text ?? '')
+  const isAuth = category === 'AUTHENTICATION'
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<{ message: string; field?: string; hint?: string } | null>(null)
   const [touched, setTouched] = useState(false)
@@ -37,12 +47,15 @@ export default function TemplateCreate() {
     const u = URL.createObjectURL(file); setFileUrl(u); return () => URL.revokeObjectURL(u)
   }, [file])
 
-  const input: TemplateInput = {
-    name, language, category, body, body_samples: samples, footer: footer || undefined,
-    header: format === 'NONE' ? null : { format, text: format === 'TEXT' ? headerText : undefined, text_sample: format === 'TEXT' ? headerSample : undefined },
-    has_media_sample: !!file,
-  }
-  const { errors, warnings } = useMemo(() => validateTemplate(input), [name, language, category, body, samples, footer, format, headerText, headerSample, file]) // eslint-disable-line react-hooks/exhaustive-deps
+  const authIn = { security_note: secNote, expiry_minutes: expiry.trim() === '' ? undefined : Number(expiry), button_text: btnText.trim() || undefined }
+  const input: TemplateInput = isAuth
+    ? { name, language, category, body: '', auth: authIn }
+    : {
+      name, language, category, body, body_samples: samples, footer: footer || undefined,
+      header: format === 'NONE' ? null : { format, text: format === 'TEXT' ? headerText : undefined, text_sample: format === 'TEXT' ? headerSample : undefined },
+      has_media_sample: !!file,
+    }
+  const { errors, warnings } = useMemo(() => validateTemplate(input), [name, language, category, body, samples, footer, format, headerText, headerSample, file, secNote, expiry, btnText]) // eslint-disable-line react-hooks/exhaustive-deps
   const on = (f: RuleIssue['field'][], list: RuleIssue[]) => list.filter((i) => f.includes(i.field))
   const show = (f: RuleIssue['field'][]) => (touched ? on(f, errors) : [])
   const Msgs = ({ fields }: { fields: RuleIssue['field'][] }) => (<>
@@ -55,7 +68,9 @@ export default function TemplateCreate() {
     if (errors.length) return
     setBusy(true)
     try {
-      const payload = { name, language, category, body, body_samples: samples, footer: footer || undefined, header: input.header ?? undefined }
+      const payload = isAuth
+        ? { name, language, category, auth: authIn }
+        : { name, language, category, body, body_samples: samples, footer: footer || undefined, header: input.header ?? undefined }
       if (file) {
         const fd = new FormData(); fd.set('payload', JSON.stringify(payload)); fd.set('sample', file)
         await api('/api/templates', { method: 'POST', body: fd })
@@ -68,7 +83,7 @@ export default function TemplateCreate() {
   }
 
   return (
-    <SettingsPage title="New template" subtitle="Meta reviews it before it can be sent. Usually minutes, sometimes a day.">
+    <SettingsPage title={st?.mode === 'fix' ? 'Fix and resubmit' : st?.mode === 'duplicate' ? 'Duplicate template' : 'New template'} subtitle="Meta reviews it before it can be sent. Usually minutes, sometimes a day.">
       <form className="space-y-4" noValidate onSubmit={(e) => { e.preventDefault(); void submit() }}>
         <Card title="Basics">
           <div className="space-y-3">
@@ -82,17 +97,38 @@ export default function TemplateCreate() {
                 <Msgs fields={['language']} />
               </label>
               <label className="block text-sm font-semibold">Category
-                <Select className="mt-1" value={category} onChange={(e) => setCategory(e.target.value)}><option value="UTILITY">Utility</option><option value="MARKETING">Marketing</option></Select>
+                <Select className="mt-1" value={category} onChange={(e) => setCategory(e.target.value)}><option value="UTILITY">Utility</option><option value="MARKETING">Marketing</option><option value="AUTHENTICATION">Authentication</option></Select>
               </label>
             </div>
             <p className="text-xs text-muted-foreground">
-              {category === 'UTILITY'
+              {isAuth
+                ? 'Authentication: one-time codes. Meta writes the message, you only choose the options below. These are sent from your own backend through the API, never from the inbox, flows or broadcasts.'
+                : category === 'UTILITY'
                 ? 'Utility: about something the customer already did, such as an order, booking or payment. Promotional wording gets it reclassified or rejected.'
                 : 'Marketing: offers, announcements and anything meant to bring someone back. Billed at the higher rate.'}
             </p>
           </div>
         </Card>
 
+        {st?.mode && pre && <p role="note" className="text-xs text-muted-foreground">Started from {pre.name}. Variable samples{pre.header_format !== 'NONE' && pre.header_format !== 'TEXT' ? ' and the media sample' : ''} are not kept, so enter them again.</p>}
+        {isAuth && (
+          <Card title="Code options">
+            <div className="space-y-3">
+              <label className="flex min-h-[40px] items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={secNote} onChange={(e) => setSecNote(e.target.checked)} />Add the security note ("do not share this code")</label>
+              <label className="block text-sm font-semibold">Code expires after (minutes, optional)
+                <Input className="mt-1" inputMode="numeric" value={expiry} onChange={(e) => setExpiry(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="10" />
+                <span className="mt-1 block text-xs font-normal text-muted-foreground">{AUTH_LIMITS.expiryMin} to {AUTH_LIMITS.expiryMax}. Shown as a footer line. Leave blank for none.</span>
+              </label>
+              <label className="block text-sm font-semibold">Button text (optional)
+                <Input className="mt-1" value={btnText} maxLength={AUTH_LIMITS.buttonText} onChange={(e) => setBtnText(e.target.value)} placeholder={AUTH_LIMITS.defaultButtonText} />
+              </label>
+              <Msgs fields={['auth']} />
+              <p className="text-xs text-muted-foreground">The button copies the code. One-tap and zero-tap need a signed Android app and are not offered.</p>
+            </div>
+          </Card>
+        )}
+
+        {!isAuth && <>
         <Card title="Header (optional)">
           <label className="block text-sm font-semibold">Type
             <Select className="mt-1" value={format} onChange={(e) => { setFormat(e.target.value as HeaderFormat); setFile(null) }}>
@@ -146,8 +182,13 @@ export default function TemplateCreate() {
           </label>
         </Card>
 
+        </>}
+
         <Card title="Preview">
-          <WaCard header={format} headerText={headerText} headerImageUrl={fileUrl} body={body} footer={footer} samples={samples} headerSamples={[headerSample]} />
+          {isAuth
+            ? <WaCard header="NONE" body={`${AUTH_BODY_PREVIEW}${secNote ? ` ${AUTH_SECURITY_NOTE}` : ''}`} footer={authIn.expiry_minutes ? `This code expires in ${authIn.expiry_minutes} minutes.` : null} button={authIn.button_text ?? AUTH_LIMITS.defaultButtonText} samples={[]} />
+            : <WaCard header={format} headerText={headerText} headerImageUrl={fileUrl} body={body} footer={footer} samples={samples} headerSamples={[headerSample]} />}
+          {isAuth && <p className="mt-2 text-xs text-muted-foreground">Meta fixes this wording and may localise it. The code is filled in when you send.</p>}
         </Card>
 
         {err && (

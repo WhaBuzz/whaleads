@@ -5,7 +5,7 @@ import type { Env } from './db'
 import { logEvent } from './db'
 import { windowState } from './conversations'
 
-export type LiveEventType = 'message.new' | 'message.status' | 'conversation.update' | 'unread.total' | 'lead.new' | 'lead.update' | 'flow.run' | 'flow.updated'
+export type LiveEventType = 'message.new' | 'message.status' | 'conversation.update' | 'unread.total' | 'lead.new' | 'lead.update' | 'flow.run' | 'flow.updated' | 'broadcast.progress'
 export interface LiveEvent { type: LiveEventType; ts: number; data: Record<string, unknown> }
 
 /** One hub per deployment. */

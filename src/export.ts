@@ -68,7 +68,7 @@ export function leadsCsvStream(env: Env, onDone?: (rows: number) => void): Reada
 /** Settings that may leave the instance: business and display values only. An ALLOWLIST: any other key
  *  (adaptor config, connect_pending, whabuzz_*, anthropic_key_enc, vapid_private_enc, future secrets) is never exported. */
 export const EXPORT_SETTINGS: ReadonlySet<string> = new Set([
-  'business_name', 'default_country', 'timezone', 'working_hours', 'allowed_origins', 'vapid_public', 'push_subject', 'flow_run_retention_days',
+  'business_name', 'default_country', 'timezone', 'working_hours', 'allowed_origins', 'vapid_public', 'push_subject', 'flow_run_retention_days', 'broadcast_per_minute',
 ])
 
 interface Section { name: string; sql: string; cols?: string[]; paged?: boolean; optional?: boolean }

@@ -26,6 +26,9 @@ import Templates from '@/pages/settings/Templates'
 import TemplateCreate from '@/pages/settings/TemplateCreate'
 import FlowsList from '@/pages/flows/FlowsList'
 import FlowEditor from '@/pages/flows/FlowEditor'
+import BroadcastsList from '@/pages/broadcasts/List'
+import BroadcastWizard from '@/pages/broadcasts/Wizard'
+import BroadcastDetail from '@/pages/broadcasts/Detail'
 import Reports from '@/pages/Reports'
 import Data from '@/pages/settings/Data'
 
@@ -65,6 +68,8 @@ export default function App() {
         <Route path="contacts" element={<Contacts />} />
         <Route path="automations" element={<FlowsList />} />
         <Route path="automations/:id" element={<FlowEditor />} />
+        <Route path="broadcasts" element={<BroadcastsList />} />
+        <Route path="broadcasts/:id" element={<BroadcastDetail />} />
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<SettingsHome />} />
         <Route path="settings/profile" element={<Profile />} />
@@ -72,6 +77,8 @@ export default function App() {
         <Route path="settings/templates" element={<Templates />} />{/* all staff list/sync; create is admin */}
         {state.me.staff.role === 'admin' && (
           <>
+            <Route path="broadcasts/new" element={<BroadcastWizard />} />
+            <Route path="broadcasts/:id/edit" element={<BroadcastWizard />} />
             <Route path="settings/business" element={<Business />} />
             <Route path="settings/team" element={<Team />} />
             <Route path="settings/pipeline" element={<Pipeline />} />

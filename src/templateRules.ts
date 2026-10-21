@@ -2,7 +2,15 @@
 
 export const TEMPLATE_LIMITS = { name: 512, body: 1024, footer: 60, headerText: 60, maxParams: 10, param: 1024 } as const
 export type HeaderFormat = 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT'
-export type TemplateCategory = 'MARKETING' | 'UTILITY'
+export type TemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
+
+/** Authentication limits (Meta): footer expiry 1-90 minutes, OTP button text 25 characters. */
+export const AUTH_LIMITS = { expiryMin: 1, expiryMax: 90, buttonText: 25, defaultButtonText: 'Copy code' } as const
+/** Meta fixes the body of an authentication template; the preview shows this. */
+export const AUTH_BODY_PREVIEW = '{{code}} is your verification code.'
+export const AUTH_SECURITY_NOTE = 'For your security, do not share this code.'
+/** One-time code accepted by POST /api/send-otp. */
+export const OTP_CODE_RE = /^[A-Za-z0-9-]{1,15}$/
 
 export interface TemplateInput {
   name: string
@@ -15,9 +23,11 @@ export interface TemplateInput {
   header?: { format: HeaderFormat; text?: string; text_sample?: string } | null
   /** A sample file was supplied (required for IMAGE/VIDEO/DOCUMENT). */
   has_media_sample?: boolean
+  /** AUTHENTICATION only: Meta supplies the body text, so `body` is ignored. */
+  auth?: { security_note?: boolean; expiry_minutes?: number; button_text?: string; button_type?: string }
 }
 
-export interface RuleIssue { field: 'name' | 'language' | 'category' | 'body' | 'body_samples' | 'footer' | 'header' | 'header_text' | 'header_sample' | 'media'; message: string }
+export interface RuleIssue { field: 'auth' | 'name' | 'language' | 'category' | 'body' | 'body_samples' | 'footer' | 'header' | 'header_text' | 'header_sample' | 'media'; message: string }
 
 const PLACEHOLDER = /\{\{\s*(\d+)\s*\}\}/g
 
@@ -50,11 +60,28 @@ function placeholderIssue(text: string, label: 'body' | 'header', max: number): 
   return null
 }
 
+function validateAuth(t: TemplateInput, errors: RuleIssue[], warnings: RuleIssue[]): { errors: RuleIssue[]; warnings: RuleIssue[] } {
+  const e = (field: RuleIssue['field'], message: string) => errors.push({ field, message })
+  if (!t.name) e('name', 'A name is required.')
+  else if (!/^[a-z0-9_]+$/.test(t.name)) e('name', 'Lowercase letters, numbers and underscores only.')
+  else if (t.name.length > TEMPLATE_LIMITS.name) e('name', `At most ${TEMPLATE_LIMITS.name} characters.`)
+  if (!/^[a-z]{2,3}(_[A-Z]{2})?$/.test(t.language ?? '')) e('language', 'Use a Meta language code such as en or en_US.')
+  if (t.header && t.header.format !== 'NONE') e('header', 'Authentication templates have no header.')
+  if (t.footer) e('footer', 'The footer of an authentication template is only the expiry line. Set the expiry minutes instead.')
+  if (t.has_media_sample) e('media', 'Authentication templates take no media.')
+  const a = t.auth ?? {}
+  if (a.button_type && a.button_type.toUpperCase() !== 'COPY_CODE') e('auth', 'Only the copy-code button is supported. One-tap and zero-tap need a signed Android app.')
+  if (a.expiry_minutes !== undefined && (!Number.isInteger(a.expiry_minutes) || a.expiry_minutes < AUTH_LIMITS.expiryMin || a.expiry_minutes > AUTH_LIMITS.expiryMax)) e('auth', `Expiry must be a whole number from ${AUTH_LIMITS.expiryMin} to ${AUTH_LIMITS.expiryMax} minutes.`)
+  if (a.button_text !== undefined && (!a.button_text.trim() || a.button_text.length > AUTH_LIMITS.buttonText)) e('auth', `Button text must be 1 to ${AUTH_LIMITS.buttonText} characters.`)
+  return { errors, warnings }
+}
+
 export function validateTemplate(t: TemplateInput): { errors: RuleIssue[]; warnings: RuleIssue[] } {
   const errors: RuleIssue[] = []
   const warnings: RuleIssue[] = []
   const e = (field: RuleIssue['field'], message: string) => errors.push({ field, message })
 
+  if (t.category === 'AUTHENTICATION') return validateAuth(t, errors, warnings)
   if (!t.name) e('name', 'A name is required.')
   else if (!/^[a-z0-9_]+$/.test(t.name)) e('name', 'Lowercase letters, numbers and underscores only.')
   else if (t.name.length > TEMPLATE_LIMITS.name) e('name', `At most ${TEMPLATE_LIMITS.name} characters.`)
@@ -100,6 +127,17 @@ export function validateTemplate(t: TemplateInput): { errors: RuleIssue[]; warni
 
 /** Meta create-template `components`, order HEADER, BODY, FOOTER. `headerHandle` = media-handle `h` for media headers. */
 export function buildComponents(t: TemplateInput, headerHandle?: string): Record<string, unknown>[] {
+  if (t.category === 'AUTHENTICATION') {
+    const a = t.auth ?? {}
+    const body: Record<string, unknown> = { type: 'BODY' }
+    if (a.security_note) body.add_security_recommendation = true
+    const out: Record<string, unknown>[] = [body]
+    if (a.expiry_minutes !== undefined) out.push({ type: 'FOOTER', code_expiration_minutes: a.expiry_minutes })
+    const btn: Record<string, unknown> = { type: 'OTP', otp_type: 'COPY_CODE' }
+    if (a.button_text?.trim()) btn.text = a.button_text.trim()
+    out.push({ type: 'BUTTONS', buttons: [btn] })
+    return out
+  }
   const out: Record<string, unknown>[] = []
   const h = t.header
   if (h && h.format === 'TEXT') {

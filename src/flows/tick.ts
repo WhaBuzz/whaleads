@@ -15,15 +15,15 @@ export interface TickOpts extends StepOpts {
   max?: number
 }
 
-export interface TickResult { resumed: number; completed: number; awaiting: number; failed: number; skipped: number; stalled: number; abandoned: number; dbCalls: number; more: boolean }
+export interface TickResult { resumed: number; completed: number; awaiting: number; failed: number; skipped: number; stalled: number; abandoned: number; dbCalls: number; /** Outbound fetches the tick made (D1 calls are counted in dbCalls). */ subrequests: number; more: boolean }
 
 export async function tick(env: Env, opts: TickOpts = {}): Promise<TickResult> {
-  const m = { calls: 0 }
+  const m: { calls: number; subrequests?: number } = { calls: 0 }
   const menv = meteredEnv(env, m)
   const now = opts.now ?? nowSec()
   const budget = opts.dbBudget ?? LIMITS.TICK_DB_CALLS
   const max = opts.max ?? LIMITS.RESUMES_PER_TICK
-  const res: TickResult = { resumed: 0, completed: 0, awaiting: 0, failed: 0, skipped: 0, stalled: 0, abandoned: 0, dbCalls: 0, more: false }
+  const res: TickResult = { resumed: 0, completed: 0, awaiting: 0, failed: 0, skipped: 0, stalled: 0, abandoned: 0, dbCalls: 0, subrequests: 0, more: false }
 
   // Due timers and expired reply waits, flows that are live only (a paused flow keeps its runs parked).
   const { results: due } = await menv.DB.prepare(
@@ -53,6 +53,7 @@ export async function tick(env: Env, opts: TickOpts = {}): Promise<TickResult> {
     res.abandoned = a.meta.changes ?? 0
   }
   res.dbCalls = m.calls
+  res.subrequests = m.subrequests ?? 0
   return res
 }
 

@@ -8,16 +8,27 @@ import { placeholders } from './templateRules'
 export interface TemplateRow {
   id: string; name: string; language: string; category: string; status: string; rejected_reason: string | null
   components: string; header_format: string; header_media_r2_key: string | null; header_media_mime: string | null
-  body_params_count: number; header_params_count: number; synced_at: number | null; created_by: number | null; created_at: number; updated_at: number
+  body_params_count: number; header_params_count: number; quality?: string | null; synced_at: number | null; created_by: number | null; created_at: number; updated_at: number
 }
 
 export interface Remote {
-  id: string | null; name: string; language: string; category: string; status: string; reason: string | null; components: any[]
+  id: string | null; name: string; language: string; category: string; status: string; reason: string | null; components: any[]; quality: string | null
 }
 
 const STATUS_MAP: Record<string, string | null> = {
   PENDING: 'PENDING', IN_APPEAL: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED', PAUSED: 'PAUSED', DISABLED: 'DISABLED',
   PENDING_DELETION: null, DELETED: null,
+}
+
+const QUALITY = new Set(['GREEN', 'YELLOW', 'RED', 'UNKNOWN'])
+/** Graph `quality_score: { score, date }` (WhaBuzz passes the same object under meta_object); a bare string is tolerated. */
+function qualityOf(...cands: unknown[]): string | null {
+  for (const c of cands) {
+    const v = typeof c === 'string' ? c : c && typeof c === 'object' ? (c as any).score : null
+    const s = typeof v === 'string' ? v.toUpperCase() : ''
+    if (QUALITY.has(s)) return s
+  }
+  return null
 }
 
 /** One list item from either adaptor: WhaBuzz `{id,status_reason,meta_object:{components}}` or Graph `{id,rejected_reason,components}`. */
@@ -40,6 +51,7 @@ export function normalizeRemote(item: any): Remote | null {
     category: cat === 'MARKETING' || cat === 'AUTHENTICATION' ? cat : 'UTILITY',
     status, reason: status === 'APPROVED' ? null : reason,
     components: Array.isArray(comps) ? comps : [],
+    quality: qualityOf(item.quality_score, mo.quality_score, item.quality, mo.quality),
   }
 }
 
@@ -85,22 +97,34 @@ export function upsertStatement(db: D1Database, r: Remote, now: number, createdB
   const d = derive(r.components)
   const id = r.id ?? `local:${r.name}:${r.language}`
   return db.prepare(
-    `INSERT INTO templates (id,name,language,category,status,rejected_reason,components,header_format,header_media_r2_key,header_media_mime,body_params_count,header_params_count,synced_at,created_by,created_at,updated_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?13,?13)
+    `INSERT INTO templates (id,name,language,category,status,rejected_reason,components,header_format,header_media_r2_key,header_media_mime,body_params_count,header_params_count,synced_at,created_by,created_at,updated_at,quality)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?13,?13,?15)
      ON CONFLICT(name,language) DO UPDATE SET
        id = CASE WHEN excluded.id LIKE 'local:%' THEN templates.id ELSE excluded.id END,
        category=excluded.category, status=excluded.status, rejected_reason=excluded.rejected_reason, components=excluded.components,
        header_format=excluded.header_format, body_params_count=excluded.body_params_count, header_params_count=excluded.header_params_count,
        header_media_r2_key=COALESCE(excluded.header_media_r2_key, templates.header_media_r2_key),
        header_media_mime=COALESCE(excluded.header_media_mime, templates.header_media_mime),
+       quality=COALESCE(excluded.quality, templates.quality),
        synced_at=excluded.synced_at, updated_at=excluded.updated_at`,
   ).bind(id, r.name, r.language, r.category, r.status, r.reason, JSON.stringify(r.components), d.header_format, media?.key ?? null, media?.mime ?? null,
-    d.body_params_count, d.header_params_count, now, createdBy)
+    d.body_params_count, d.header_params_count, now, createdBy, r.quality)
 }
 
 const comp = (components: any[], type: string) => components.find((c) => String(c?.type).toUpperCase() === type)
 
 /** Row as the API/UI sees it: text parts pulled out of the components, no R2 key. */
+/** The authentication settings Meta echoes back, for the "Duplicate" prefill. */
+function authOf(components: any[]) {
+  const otp = (comp(components, 'BUTTONS')?.buttons ?? []).find((b: any) => b?.type === 'OTP')
+  const exp = comp(components, 'FOOTER')?.code_expiration_minutes
+  return {
+    security_note: !!comp(components, 'BODY')?.add_security_recommendation,
+    expiry_minutes: Number.isInteger(exp) ? exp : null,
+    button_text: typeof otp?.text === 'string' ? otp.text : null,
+  }
+}
+
 export function rowJson(r: TemplateRow) {
   let components: any[] = []
   try { const p = JSON.parse(r.components); if (Array.isArray(p)) components = p } catch { /* keep [] */ }
@@ -112,7 +136,8 @@ export function rowJson(r: TemplateRow) {
     body: String(body?.text ?? ''), footer: footer?.text ? String(footer.text) : null,
     body_params_count: r.body_params_count, header_params_count: r.header_params_count,
     has_header_sample: !!r.header_media_r2_key, header_media_mime: r.header_media_mime,
-    synced_at: r.synced_at, created_at: r.created_at,
+    ...(r.category === 'AUTHENTICATION' ? { auth: authOf(components) } : {}),
+    quality: r.quality ?? null, synced_at: r.synced_at, created_at: r.created_at,
   }
 }
 

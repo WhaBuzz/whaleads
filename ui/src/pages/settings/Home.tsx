@@ -1,10 +1,11 @@
-import { BarChart3, Workflow, Building2, Bot, Database, FileText, ChevronRight, ClipboardList, KanbanSquare, MessageCircle, Zap, UserCircle, Users } from 'lucide-react'
+import { BarChart3, Megaphone, Workflow, Building2, Bot, Database, FileText, ChevronRight, ClipboardList, KanbanSquare, MessageCircle, Zap, UserCircle, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/PageHeader'
 import { useAuth } from '@/lib/auth'
 
 const SECTIONS = [
   { to: '/automations', label: 'Automations', body: 'Flows that reply and route leads for you', icon: Workflow, admin: false },
+  { to: '/broadcasts', label: 'Broadcasts', body: 'Send a template to a group of contacts', icon: Megaphone, admin: false },
   { to: '/reports', label: 'Reports', body: 'Leads, sources, response times, messages', icon: BarChart3, admin: false },
   { to: '/settings/data', label: 'Data', body: 'Export leads, import a CSV', icon: Database, admin: true },
   { to: '/settings/business', label: 'Business', body: 'Name, country, timezone, working hours', icon: Building2, admin: true },

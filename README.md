@@ -6,7 +6,8 @@ A free WhatsApp lead inbox, CRM and automation builder for a small team that tak
 
 - A shared inbox with the 24 hour reply window shown on every chat, and leads with stages, tags, owners, notes and reports.
 - Click-to-WhatsApp ads are attributed: the ad's id, headline and link are saved on the lead.
-- Message templates (including image, video and document headers) and no-code automations with a dry run and a shadow mode.
+- Message templates (including image, video and document headers, and one-time-code templates sent by API) and no-code automations with a dry run and a shadow mode.
+- Basic broadcasts: send one approved template to leads picked by tag, paced by the Worker, with opt-outs honoured (STOP keywords, Meta's opt-out signal, or by hand).
 - Web push notifications on any phone once the app is installed.
 - One WhatsApp number per deployment, by design. Deploy again for another number.
 - Built to run on the Cloudflare Workers Free plan: one Worker, one D1 database, one Durable Object for the live inbox, an optional R2 bucket for media.
@@ -47,7 +48,7 @@ Prefer the command line? [docs/DEPLOY.md](docs/DEPLOY.md) has `wrangler deploy` 
 
 ## Where WhaLeads stops
 
-Broadcasts, several numbers in one deployment, multi-client hosting and voice are out of scope. Need many numbers, many clients or broadcasts? Use WhaBuzz directly.
+Several numbers in one deployment, multi-client hosting and voice are out of scope. Need many numbers or many clients? Use WhaBuzz directly.
 
 ## License
 

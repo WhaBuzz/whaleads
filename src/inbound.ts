@@ -10,6 +10,9 @@ import { publishMessage, publishMessageStatus } from './live' // D20
 import { parseReferral, type Referral } from './attribution'
 import { inboundConversation, previewOf } from './conversations'
 import { MEDIA_TYPES, inboundMediaRow, storeMediaForWamid } from './media'
+import { classifyKeyword, applyKeyword } from './broadcasts/optout'
+import { broadcastStatusStmts, rank } from './broadcasts/receipts'
+import { errorCode, errorMessage } from './broadcasts/classify'
 import type { InboundEvent, InboundMessage, InboundStatus } from './adaptors/types'
 
 /** Upsert a contact by wa_id (falling back to a form-captured phone match). Returns contact id. */
@@ -74,6 +77,9 @@ async function onMessage(env: Env, ctx: ExecutionContext, e: InboundMessage, res
   if (!ins.meta.changes) { res.duplicates++; return }
 
   res.messages++
+  // Opt-out keywords (broadcasts): whole-message STOP / START style text only. Never fails the webhook.
+  const kw = !MEDIA_TYPES.has(e.type) ? classifyKeyword(e.body) : null
+  if (kw) await applyKeyword(env, ctx, contactId, kw).catch((err) => logEvent(env.DB, 'optout_keyword_error', { contactId, error: String(err) }))
   // copy the file to R2 after the response. Failures stay `pending` and the cron retries them.
   if (e.media_id && e.wamid && MEDIA_TYPES.has(e.type) && env.MEDIA) {
     ctx.waitUntil(storeMediaForWamid(env, e.wamid).catch((err) => logEvent(env.DB, 'media_store_error', { wamid: e.wamid, error: String(err) })))
@@ -88,15 +94,21 @@ async function onMessage(env: Env, ctx: ExecutionContext, e: InboundMessage, res
   if (e.wamid) onInboundMessage(env, ctx, { contactId, wamid: e.wamid, text: e.body, newLeadId: newLead })
 }
 
-const rank = (col: string) => `CASE ${col} WHEN 'read' THEN 3 WHEN 'delivered' THEN 2 WHEN 'sent' THEN 1 ELSE 0 END`
-
 async function onStatus(env: Env, ctx: ExecutionContext, e: InboundStatus, res: PipelineResult): Promise<void> {
   // Dedupe row and the message update commit together. "failed" is terminal; otherwise status only moves forward.
+  const at = Math.floor(Date.now() / 1000)
+  const err = e.status === 'failed' ? (e.errors?.[0] ?? null) : null
+  const code = errorCode(err)
   const [ins, upd] = await env.DB.batch([
     env.DB.prepare(`INSERT OR IGNORE INTO message_statuses (wamid,status,timestamp,raw) VALUES (?,?,?,?)`)
       .bind(e.wamid, e.status, e.timestamp, JSON.stringify(e.raw)),
     env.DB.prepare(`UPDATE messages SET status=?1 WHERE wamid=?2 AND changes() > 0 AND status IS NOT 'failed' AND (?1='failed' OR ${rank('status')} < ${rank('?1')})`)
       .bind(e.status, e.wamid),
+    // Broadcast recipients, by wamid. After the two statements above (they read changes()). The counters run BEFORE the recipient
+    // row moves, because they read its old status; the forward-only guards make a replay a no-op. A receipt that beats the
+    // recipient's own `sent` write finds no 'sent' row here; the broadcast step reads it back in its sent-write batch and
+    // replays it (src/broadcasts/step.ts), so nothing is lost.
+    ...broadcastStatusStmts(env, e.wamid, e.status, at, code, errorMessage(err, '')),
   ])
   if (!ins.meta.changes) { res.duplicates++; return }
   res.statuses++

@@ -106,3 +106,9 @@ export async function getAiModel(env: Env): Promise<string> {
 export async function phoneCountry(env: Env): Promise<string> {
   return (await getSettings(env)).default_country ?? 'IN'
 }
+
+/** Broadcast pace, sends per minute (1-40). The Worker's cron step reads it; the default keeps one tick inside the free-plan subrequest cap. */
+export async function getBroadcastPerMinute(env: Env): Promise<number> {
+  const n = Number((await rows(env.DB)).get('broadcast_per_minute'))
+  return Number.isInteger(n) && n >= 1 && n <= 40 ? n : 20
+}

@@ -17,7 +17,7 @@ export interface Msg {
 }
 export interface Thread {
   ok: boolean
-  contact: { id: number; name: string | null; phone: string | null; wa_id: string | null }
+  contact: { id: number; name: string | null; phone: string | null; wa_id: string | null; opted_out_at?: number | null; opt_out_source?: string | null }
   messages: Msg[]
   conversation: { unread_count: number; status: 'open' | 'closed'; assigned_to: number | null; assigned_name: string | null } | null
   window_open: boolean; window_closes_at: number | null; has_more: boolean; next_before: number | null

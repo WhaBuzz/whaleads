@@ -1,4 +1,4 @@
-import type { AdaptorError, MediaSend, TemplateHeaderSend } from './types'
+import type { AdaptorError, MediaSend, TemplateButtonSend, TemplateHeaderSend } from './types'
 
 const enc = new TextEncoder()
 
@@ -39,7 +39,7 @@ export function mediaObject(m: MediaSend): Record<string, string> {
  * The `template.components` array of a template message. Meta order: header, then body.
  * Media headers go by `id` when we uploaded the file, else by `link`. No body component when there are no body params.
  */
-export function templateComponents(params: string[], header?: TemplateHeaderSend): Record<string, unknown>[] {
+export function templateComponents(params: string[], header?: TemplateHeaderSend, buttons?: TemplateButtonSend[]): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = []
   if (header) {
     if (header.format === 'TEXT') {
@@ -52,5 +52,6 @@ export function templateComponents(params: string[], header?: TemplateHeaderSend
     }
   }
   if (params.length) out.push({ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) })
+  for (const b of buttons ?? []) out.push({ type: 'button', sub_type: b.sub_type, index: String(b.index), parameters: [{ type: 'text', text: b.text }] })
   return out
 }

@@ -3,7 +3,7 @@
 // 300 s tolerance (mirrors whabuzz packages/core/src/webhooks/sign.ts verifySignature).
 import { timedFetch } from '../timing'
 import type {
-  AdaptorError, AdaptorResult, InboundEvent, MediaFetch, MediaSend, MetaAdaptor, NumberStatus, SendContext, SendResult, TemplateAdaptor, TemplateHeaderSend, WhaBuzzConfig,
+  AdaptorError, AdaptorResult, InboundEvent, MediaFetch, MediaSend, MetaAdaptor, NumberStatus, SendContext, SendResult, TemplateAdaptor, TemplateButtonSend, TemplateHeaderSend, WhaBuzzConfig,
 } from './types'
 import { contactNames, messageEvent, statusEvent } from './meta-parse'
 import { hmacHex, mediaObject, metaMessage, netError, safeEqual, templateComponents } from './util'
@@ -170,11 +170,11 @@ export class WhaBuzzAdaptor implements MetaAdaptor {
     return this.toSend(await this.call('/messages', { body }))
   }
 
-  async sendTemplate(to: string, name: string, lang: string, params: string[], header?: TemplateHeaderSend): Promise<SendResult> {
+  async sendTemplate(to: string, name: string, lang: string, params: string[], header?: TemplateHeaderSend, buttons?: TemplateButtonSend[]): Promise<SendResult> {
     return this.toSend(await this.call('/messages', {
       body: {
         from: this.cfg.phone_number_id, messaging_product: 'whatsapp', to, type: 'template',
-        template: { name, language: { code: lang }, components: templateComponents(params, header) },
+        template: { name, language: { code: lang }, components: templateComponents(params, header, buttons) },
       },
     }))
   }

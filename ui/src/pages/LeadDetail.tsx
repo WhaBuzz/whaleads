@@ -17,6 +17,7 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { leadName, safeUrl, stageTone, useMeta, whenLabel, type ActivityT, type LeadDetailT, type Stage } from '@/lib/crm'
 import { showPhone } from '@/lib/inbox'
+import { OptOutControl } from '@/components/broadcasts/parts'
 import { useLiveEvents } from '@/lib/live'
 import { useLoad } from '@/lib/useLoad'
 
@@ -80,6 +81,7 @@ export default function LeadDetail() {
           <Badge>{m.sources.find((s) => s.key === lead.source)?.label ?? lead.source}</Badge>
           {lead.tags.map((t) => <Badge key={t.id} tone={t.color}>{t.label}</Badge>)}
         </div>
+        <div className="mt-2"><OptOutControl contactId={lead.contact_id} payload={lead} /></div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link to={`/inbox/${lead.contact_id}`}><Button variant="secondary"><MessageSquare className="h-4 w-4" aria-hidden />Messages{conversation?.unread_count ? ` (${conversation.unread_count})` : ''}</Button></Link>
           <Button variant="secondary" onClick={() => setCall(true)}><Phone className="h-4 w-4" aria-hidden />Log call</Button>

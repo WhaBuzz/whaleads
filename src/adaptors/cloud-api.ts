@@ -1,7 +1,7 @@
 // Cloud API adaptor: Meta Graph API direct. Advanced path (manual credentials). WhatsApp only (D6).
 import { timedFetch } from '../timing'
 import type {
-  AdaptorError, AdaptorResult, CloudApiConfig, InboundEvent, MediaFetch, MediaSend, MetaAdaptor, NumberStatus, SendContext, SendResult, TemplateAdaptor, TemplateHeaderSend,
+  AdaptorError, AdaptorResult, CloudApiConfig, InboundEvent, MediaFetch, MediaSend, MetaAdaptor, NumberStatus, SendContext, SendResult, TemplateAdaptor, TemplateButtonSend, TemplateHeaderSend,
 } from './types'
 import { parseMetaBody } from './meta-parse'
 import { hmacHex, mediaObject, metaMessage, netError, safeEqual, templateComponents } from './util'
@@ -38,7 +38,7 @@ export class CloudApiAdaptor implements MetaAdaptor {
   }
 
   private listTemplates(opts?: { name?: string; after?: string }): Promise<AdaptorResult> {
-    const q = `fields=id,name,status,category,language,rejected_reason,components&limit=100${opts?.name ? `&name=${encodeURIComponent(opts.name)}` : ''}${opts?.after ? `&after=${encodeURIComponent(opts.after)}` : ''}`
+    const q = `fields=id,name,status,category,language,rejected_reason,quality_score,components&limit=100${opts?.name ? `&name=${encodeURIComponent(opts.name)}` : ''}${opts?.after ? `&after=${encodeURIComponent(opts.after)}` : ''}`
     return this.graph(`${this.cfg.waba_id}/message_templates?${q}`, { method: 'GET' })
   }
 
@@ -86,11 +86,11 @@ export class CloudApiAdaptor implements MetaAdaptor {
     return this.toSend(await this.graph(`${this.cfg.phone_number_id}/messages`, { body }))
   }
 
-  async sendTemplate(to: string, name: string, lang: string, params: string[], header?: TemplateHeaderSend): Promise<SendResult> {
+  async sendTemplate(to: string, name: string, lang: string, params: string[], header?: TemplateHeaderSend, buttons?: TemplateButtonSend[]): Promise<SendResult> {
     return this.toSend(await this.graph(`${this.cfg.phone_number_id}/messages`, {
       body: {
         messaging_product: 'whatsapp', to, type: 'template',
-        template: { name, language: { code: lang }, components: templateComponents(params, header) },
+        template: { name, language: { code: lang }, components: templateComponents(params, header, buttons) },
       },
     }))
   }

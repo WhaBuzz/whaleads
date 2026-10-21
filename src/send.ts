@@ -182,18 +182,57 @@ export async function sendTemplateToContact(env: Env, contactId: number, t: Temp
   return { ok: true, wamid, now, queued: queuedId(r), text, mediaId }
 }
 
+// ---- template, prepared (broadcasts) -------------------------------------------------------------------------
+
+export interface PreparedTemplate {
+  name: string
+  language: string
+  bodyParams: string[]
+  headerParams: string[]
+  /** Already uploaded (once per broadcast). Set for IMAGE / VIDEO / DOCUMENT headers. */
+  header: TemplateHeaderSend | null
+  /** The rendered text recorded on the message row. */
+  text: string
+}
+
+export type PreparedSent = { ok: true; wamid: string | null; now: number; queued: string | null; statements: D1PreparedStatement[] } | { ok: false; result: AdaptorResult }
+
+/**
+ * The broadcast send: no target lookup (the destination comes from the claim), no upload, no deferral. Returns the
+ * message row + conversation touch as statements for the caller's own batch, which also settles the recipient row, so one
+ * D1 call records a send. No first_response (an origin marks it automated) and no live publish (the step publishes once).
+ */
+export async function sendTemplatePrepared(env: Env, adaptor: { sendTemplate: (to: string, name: string, lang: string, params: string[], header?: TemplateHeaderSend) => Promise<SendResult> }, contactId: number, dest: string, t: PreparedTemplate, origin: string): Promise<PreparedSent> {
+  const header = t.header ?? (t.headerParams.length ? ({ format: 'TEXT', params: t.headerParams } as TemplateHeaderSend) : undefined)
+  const r = await adaptor.sendTemplate(dest, t.name, t.language, t.bodyParams, header)
+  if (!r.ok) return { ok: false, result: r }
+  const now = nowSec()
+  return {
+    ok: true, wamid: r.wamid, now, queued: queuedId(r),
+    statements: [
+      outboundMessageInsert(env.DB, contactId, r.wamid, 'template', t.text, null, now, origin),
+      outboundConversation(env.DB, contactId, now, previewOf('template', t.text)),
+    ],
+  }
+}
+
 // ---- template lookup for automation -------------------------------------------------------------------------
 
 export type TemplateLookup = { ok: true; template: TemplateRow } | { ok: false; code: 'template_not_found' | 'template_not_sendable' | 'template_not_approved'; message: string }
 
 /** An approved, sendable template by id, or by name when the id is not found (a graph may carry either). */
-export async function loadSendableTemplate(env: Env, ref: { id?: unknown; name?: unknown }): Promise<TemplateLookup> {
+export async function loadSendableTemplate(env: Env, ref: { id?: unknown; name?: unknown; language?: unknown }, allowAuth = false): Promise<TemplateLookup> {
   const id = typeof ref.id === 'string' ? ref.id : ref.id != null ? String(ref.id) : ''
   const name = typeof ref.name === 'string' ? ref.name : ''
   let t = id ? await env.DB.prepare(`SELECT * FROM templates WHERE id=?`).bind(id).first<TemplateRow>() : null
-  if (!t && name) t = await env.DB.prepare(`SELECT * FROM templates WHERE name=? AND status='APPROVED' ORDER BY updated_at DESC LIMIT 1`).bind(name).first<TemplateRow>()
+  const language = typeof ref.language === 'string' ? ref.language : ''
+  if (!t && name) t = language
+    ? await env.DB.prepare(`SELECT * FROM templates WHERE name=? AND language=?`).bind(name, language).first<TemplateRow>()
+    : await env.DB.prepare(`SELECT * FROM templates WHERE name=? AND status='APPROVED' ORDER BY updated_at DESC LIMIT 1`).bind(name).first<TemplateRow>()
   if (!t) return { ok: false, code: 'template_not_found', message: 'The template no longer exists.' }
-  const sb = sendability(safeComponents(t.components), t.category)
+  // allowAuth is passed by src/otp.ts only: it then accepts AUTHENTICATION templates and nothing else.
+  if (allowAuth && t.category !== 'AUTHENTICATION') return { ok: false, code: 'template_not_sendable', message: 'Only authentication templates can be sent as one-time codes.' }
+  const sb = allowAuth ? { sendable: true, reason: null } : sendability(safeComponents(t.components), t.category)
   if (!sb.sendable) return { ok: false, code: 'template_not_sendable', message: sb.reason ?? 'This template cannot be sent.' }
   if (t.status !== 'APPROVED') return { ok: false, code: 'template_not_approved', message: `This template is ${t.status.toLowerCase()}, so it cannot be sent.` }
   return { ok: true, template: t }

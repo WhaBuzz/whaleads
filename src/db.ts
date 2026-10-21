@@ -305,6 +305,59 @@ export const MIGRATIONS: string[][] = [
     `CREATE INDEX IF NOT EXISTS leads_ad_source_idx ON leads (ad_source_id)`,
     `CREATE INDEX IF NOT EXISTS leads_external_idx ON leads (external_id) WHERE external_id IS NOT NULL`,
   ],
+  // v9 (broadcasts): opt-out on contacts, template quality, broadcasts + recipients. Additive only; v8 code ignores all of it.
+  [
+    `ALTER TABLE contacts ADD COLUMN opted_out_at INTEGER`,
+    `ALTER TABLE contacts ADD COLUMN opt_out_source TEXT`,
+    `ALTER TABLE templates ADD COLUMN quality TEXT`,
+    `CREATE TABLE broadcasts (
+      id TEXT PRIMARY KEY,                       -- 'bc_' + random
+      name TEXT NOT NULL,
+      template_id TEXT NOT NULL,                 -- local templates.id; name/language/category copied below
+      template_name TEXT NOT NULL,
+      language TEXT NOT NULL,
+      category TEXT NOT NULL,
+      params TEXT NOT NULL DEFAULT '{}',         -- {body:[{kind:'fixed',value}|{kind:'field',field,fallback}], header:[...]}
+      filter TEXT NOT NULL DEFAULT '{}',         -- {tags:[id], tag_mode:'any'|'all', stage?:key}; JSON so hosted segments can extend it
+      status TEXT NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft','queued','running','paused','cancelled','finished','failed')),
+      pause_reason TEXT,                         -- error code + message when the system paused it
+      total INTEGER NOT NULL DEFAULT 0,
+      excluded INTEGER NOT NULL DEFAULT 0,       -- opted out, no phone, duplicate contact
+      sent INTEGER NOT NULL DEFAULT 0,
+      delivered INTEGER NOT NULL DEFAULT 0,
+      read INTEGER NOT NULL DEFAULT 0,
+      failed INTEGER NOT NULL DEFAULT 0,
+      header_media_id TEXT,                      -- uploaded once per broadcast
+      header_media_at INTEGER,
+      scheduled_at INTEGER,                      -- reserved, unused in WhaLeads
+      created_by TEXT,
+      created_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER,
+      updated_at INTEGER NOT NULL
+    )`,
+    `CREATE INDEX broadcasts_status ON broadcasts(status, created_at)`,
+    `CREATE TABLE broadcast_recipients (
+      broadcast_id TEXT NOT NULL,
+      contact_id TEXT NOT NULL,
+      lead_id TEXT,                              -- the lead that matched (newest if several)
+      status TEXT NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued','sending','sent','delivered','read','failed','skipped','unknown')),
+      params TEXT,                               -- resolved params, frozen at start
+      wamid TEXT,
+      error_code INTEGER,
+      error_message TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL DEFAULT 0,
+      sent_at INTEGER,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (broadcast_id, contact_id)
+    )`,
+    `CREATE INDEX broadcast_recipients_queue ON broadcast_recipients(broadcast_id, status, next_attempt_at)`,
+    `CREATE INDEX broadcast_recipients_wamid ON broadcast_recipients(wamid) WHERE wamid IS NOT NULL`,
+    `CREATE INDEX contacts_opted_out ON contacts(opted_out_at) WHERE opted_out_at IS NOT NULL`,
+  ],
 ]
 
 const ready = new WeakMap<D1Database, Promise<number>>()

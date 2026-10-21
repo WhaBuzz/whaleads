@@ -5,7 +5,7 @@ import { isCountryCode } from '../countries'
 import type { Env } from '../db'
 import { logEvent } from '../db'
 import { json } from '../leads'
-import { anthropicKeyInfo, getSettings, putSetting, setAnthropicKey } from '../settings'
+import { anthropicKeyInfo, getBroadcastPerMinute, getSettings, putSetting, setAnthropicKey } from '../settings'
 import { readJson } from './auth'
 
 export const actorId = (a: Actor | null): number | null => (a?.kind === 'staff' ? a.staff.id : null)
@@ -41,7 +41,7 @@ async function view(env: Env, admin: boolean) {
     ok: true,
     settings: {
       business_name: s.business_name, default_country: s.default_country, timezone: s.timezone,
-      working_hours: s.working_hours, allowed_origins: s.allowed_origins,
+      working_hours: s.working_hours, allowed_origins: s.allowed_origins, broadcast_per_minute: await getBroadcastPerMinute(env),
       ...(admin ? { ai: await anthropicKeyInfo(env) } : {}),
     },
     sources: s.sources,
@@ -91,6 +91,11 @@ async function patch(req: Request, env: Env, actor: Actor | null): Promise<Respo
       }
       writes.push(['allowed_origins', out])
     }
+  }
+  if ('broadcast_per_minute' in b) {
+    if (b.broadcast_per_minute === null) writes.push(['broadcast_per_minute', undefined])
+    else if (!Number.isInteger(b.broadcast_per_minute) || (b.broadcast_per_minute as number) < 1 || (b.broadcast_per_minute as number) > 40) return fail('broadcast pace must be a whole number from 1 to 40 per minute', 'broadcast_per_minute')
+    else writes.push(['broadcast_per_minute', b.broadcast_per_minute])
   }
   let ai: string | null | undefined
   if ('anthropic_key' in b) {

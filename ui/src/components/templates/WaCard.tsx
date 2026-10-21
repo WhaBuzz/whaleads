@@ -3,8 +3,8 @@ import { renderParams } from '../../../../src/templateRules'
 import type { HeaderFormat } from '@/lib/templates'
 
 /** A WhatsApp-style message card. Values replace {{n}}; a missing value shows the placeholder itself. */
-export function WaCard({ header, headerText, headerImageUrl, body, footer, samples = [], headerSamples = [] }: {
-  header: HeaderFormat; headerText?: string | null; headerImageUrl?: string | null; body: string; footer?: string | null
+export function WaCard({ header, headerText, headerImageUrl, body, footer, button, samples = [], headerSamples = [] }: {
+  header: HeaderFormat; headerText?: string | null; headerImageUrl?: string | null; body: string; footer?: string | null; /** Copy-code button label (authentication preview). */ button?: string
   samples?: string[]; headerSamples?: string[]
 }) {
   const Icon = header === 'VIDEO' ? Film : header === 'DOCUMENT' ? FileText : ImageIcon
@@ -19,6 +19,7 @@ export function WaCard({ header, headerText, headerImageUrl, body, footer, sampl
         )}
         <p className="whitespace-pre-wrap px-3 py-2 [overflow-wrap:anywhere]">{body ? renderParams(body, samples) : <span className="text-muted-foreground">Your message appears here.</span>}</p>
         {footer && <p className="px-3 pb-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{footer}</p>}
+        {button && <p className="border-t px-3 py-2 text-center text-sm font-semibold text-accent [overflow-wrap:anywhere]">{button}</p>}
       </div>
     </div>
   )

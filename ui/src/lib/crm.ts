@@ -10,7 +10,7 @@ export interface Tag { id: number; label: string; color: string }
 export interface Owner { id: number; name: string; role: string }
 
 export interface LeadT {
-  id: number; contact_id: number; name: string | null; phone: string | null; wa_id: string | null; email: string | null
+  id: number; contact_id: number; name: string | null; phone: string | null; wa_id: string | null; email: string | null; opted_out_at?: number | null; opt_out_source?: string | null
   source: string; status: string; stage_label: string | null; stage_kind: 'open' | 'won' | 'lost' | null; message: string | null
   created_at: number; updated_at: number; assigned_to: number | null; assigned_name: string | null; next_action_at: number | null
   lost_reason: string | null; won_at: number | null; closed_at: number | null; first_response_at: number | null; last_activity_at: number | null

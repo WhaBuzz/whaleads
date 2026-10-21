@@ -50,11 +50,14 @@ Every route the Worker serves (`/api/*`, `/webhooks/*`). The SPA and static file
 | GET `/api/stages`, `/api/sources`, `/api/tags` | staff | - | - |
 | GET `/api/templates`, `/templates/recent-media`, `/templates/:id/media` | staff | - | - |
 | POST `/api/templates/sync` | staff | yes | `tplsync` 10/min |
+| POST `/api/send-otp` | Bearer `ADMIN_KEY` only (a session, even admin, gets 403) | no (no cookie) | `otp` 30/min deployment-wide, plus 5 per destination per 10 min |
 | GET `/api/push/vapid` | staff | - | - |
 | POST, DELETE `/api/push/subscribe`; POST `/api/push/unsubscribe` | staff | yes | `pushsub` 30/min |
 | POST `/api/push/test` | staff | yes | `pushtest` 5/min |
 | GET `/api/flows`, `/flows/:id`, `/flows/:id/runs`, `/api/flow-runs/:id`, `/api/leads/:id/flow-runs` | staff | - | - |
 | POST `/api/flows/:id/dry-run` | staff | yes | 10/min per staff; HTTP nodes skipped |
+| GET `/api/broadcasts`, `/broadcasts/:id`, `/broadcasts/:id/recipients` | staff | - | `bcread` 240/min |
+| PATCH `/api/contacts/:id/opt-out` | staff | yes | `optout` 60/min |
 | GET `/api/settings` | staff (AI key shown as `last4`, admins only) | - | - |
 
 ## Admin
@@ -62,10 +65,12 @@ Every route the Worker serves (`/api/*`, `/webhooks/*`). The SPA and static file
 | Route | Auth | CSRF | Limit |
 |---|---|---|---|
 | PUT, PATCH `/api/settings` | admin | yes | - |
+| POST `/api/broadcasts/preview` | admin | yes | `bcpreview` 30/min |
+| POST `/api/broadcasts`, `/broadcasts/:id/start`, `/pause`, `/resume`, `/cancel`, `/requeue-unknown`; PATCH, DELETE `/api/broadcasts/:id` | admin | yes | `bcwrite` 30/min |
 | GET `/api/staff`; PATCH `/api/staff/:id` | admin | PATCH: yes | Deactivating deletes sessions and closes sockets |
 | POST `/api/staff`, `/api/staff/:id/reset-password` | admin | yes | `staffwrite` 20 per 10 min |
 | POST, PATCH, DELETE `/api/stages`, `/stages/reorder`, `/api/sources`, `/api/tags` | admin | yes | - |
-| POST `/api/templates`; DELETE `/api/templates/:id` | admin | yes | `tplcreate` 20/h (create) |
+| POST `/api/templates`; DELETE `/api/templates/:id` | admin | yes | `tplcreate` 20/h (create); delete is 409 `template_in_use` while a draft, queued, running or paused broadcast uses it |
 | POST, PUT, DELETE `/api/flows`, `/flows/:id`, `/flows/:id/{publish,pause,archive,duplicate}`, `/api/flow-runs/:id/cancel` | admin | yes | 60/min per staff |
 | GET `/api/export/leads.csv`, `/api/export/full.json` | admin | - | `export` 10/h |
 | GET `/api/export/log` | admin | - | - |

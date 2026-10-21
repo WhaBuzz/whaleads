@@ -25,6 +25,7 @@ export function fakeD1(shared?: DatabaseSync) {
     exec: async (sql: string) => { db.exec(sql) },
     // One synchronous block, like a D1 batch: all statements in a single transaction, nothing interleaves.
     batch: async (stmts: Stmt[]) => {
+      if (stmts.length === 0) throw new Error('D1_ERROR: No SQL statements detected.') // real D1 rejects an empty batch
       db.exec('BEGIN')
       try { const out = stmts.map((s) => s.runSync()); db.exec('COMMIT'); return out } catch (e) { db.exec('ROLLBACK'); throw e }
     },
@@ -33,7 +34,7 @@ export function fakeD1(shared?: DatabaseSync) {
 }
 
 /** A database exactly as an earlier release left it: the first `version` migrations, applied by hand. */
-async function legacy(version: 2 | 3 | 4 | 5 | 6 | 7, withLocks: boolean) {
+async function legacy(version: 2 | 3 | 4 | 5 | 6 | 7 | 8, withLocks: boolean) {
   const { MIGRATIONS } = await import('../src/db')
   const f = fakeD1()
   f.raw.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`)
@@ -55,3 +56,5 @@ export const legacyV5 = () => legacy(5, true)
 export const legacyV6 = () => legacy(6, true)
 /** A genuine v7 database (flows): locks applied_1..7 present, before the reports indexes. */
 export const legacyV7 = () => legacy(7, true)
+/** A genuine v8 database (reports indexes): locks applied_1..8 present, before broadcasts. */
+export const legacyV8 = () => legacy(8, true)

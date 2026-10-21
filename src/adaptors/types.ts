@@ -65,6 +65,9 @@ export type TemplateHeaderSend =
   | { format: 'IMAGE' | 'VIDEO' | 'DOCUMENT'; mediaId?: string; link?: string; filename?: string }
   | { format: 'TEXT'; params: string[] }
 
+/** A button component of a template message (e.g. the copy-code button of an authentication template). Passed through as-is. */
+export interface TemplateButtonSend { index: number; sub_type: 'url' | 'quick_reply' | 'phone_number' | 'copy_code'; text: string }
+
 export interface TemplateAdaptor {
   /** `after` = Graph paging cursor (Cloud API); WhaBuzz returns everything for the WABA. */
   list(opts?: { name?: string; after?: string }): Promise<AdaptorResult>
@@ -120,7 +123,7 @@ export interface MetaAdaptor {
   readonly onboarding: 'connect_button' | 'manual_form'
   status(): Promise<NumberStatus>
   sendText(to: string, text: string, ctx?: SendContext): Promise<SendResult>
-  sendTemplate(to: string, name: string, lang: string, params: string[], header?: TemplateHeaderSend): Promise<SendResult>
+  sendTemplate(to: string, name: string, lang: string, params: string[], header?: TemplateHeaderSend, buttons?: TemplateButtonSend[]): Promise<SendResult>
   markRead(messageId: string): Promise<AdaptorResult>
   fetchMedia(mediaId: string): Promise<MediaFetch>
   uploadMedia(bytes: ArrayBuffer | Uint8Array, mime: string): Promise<AdaptorResult<{ id?: string }>>

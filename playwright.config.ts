@@ -12,7 +12,7 @@ export default defineConfig({
   projects: [
     { name: 'onboarding', testMatch: /(setup-login|settings-staff|zrecover)\.spec\.ts/ },
     { name: 'auth', testMatch: /auth\.setup\.ts/, dependencies: ['onboarding'] },
-    { name: 'app', testMatch: /(inbox|inbox-send-media|crm-leads|push|templates|automation-run|flow-editor|reports-export|whabuzz-connect|zlive|zws)\.spec\.ts/, dependencies: ['auth'], use: { storageState: AUTH_FILE } },
+    { name: 'app', testMatch: /(inbox|inbox-send-media|crm-leads|push|templates|broadcasts|automation-run|flow-editor|reports-export|whabuzz-connect|zlive|zws)\.spec\.ts/, dependencies: ['auth'], use: { storageState: AUTH_FILE } },
     // Safari engine, for the flow-editor canvas only. PW_WEBKIT overrides the binary when the cached revision differs. Run: npx playwright test --project=auth --project=app-webkit
     { name: 'app-webkit', testMatch: /flow-editor\.spec\.ts/, dependencies: ['auth'], use: { ...devices['Desktop Safari'], storageState: AUTH_FILE, serviceWorkers: 'block', launchOptions: process.env.PW_WEBKIT ? { executablePath: process.env.PW_WEBKIT } : {} } },
   ],

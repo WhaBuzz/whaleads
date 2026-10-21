@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MIGRATIONS, ensureSchema } from '../src/db'
-import { fakeD1, legacyV2, legacyV3, legacyV4, legacyV5, legacyV7 } from './d1'
+import { fakeD1, legacyV2, legacyV3, legacyV4, legacyV5, legacyV7, legacyV8 } from './d1'
 
 type Raw = ReturnType<typeof fakeD1>['raw']
 const one = <T = any>(raw: Raw, sql: string) => raw.prepare(sql).get() as T
@@ -237,7 +237,8 @@ describe('migrate(): flow engine step (flows, flow_runs, messages.origin)', () =
     const after = { leads: all(f.raw, 'SELECT * FROM leads ORDER BY id'), msgs: all(f.raw, 'SELECT * FROM messages ORDER BY id'), contacts: all(f.raw, 'SELECT * FROM contacts ORDER BY id') }
     // existing rows are byte-identical except the new nullable column on messages
     expect(after.leads).toEqual(before.leads)
-    expect(after.contacts).toEqual(before.contacts)
+    // (v9 adds the nullable opt-out columns to contacts: compare the original columns only)
+    expect(after.contacts.map(({ opted_out_at, opt_out_source, ...c }: any) => c)).toEqual(before.contacts)
     expect(after.msgs.map((m: any) => ({ ...m, origin: undefined }))).toEqual(before.msgs.map((m: any) => ({ ...m, origin: undefined })))
     expect(after.msgs.every((m: any) => m.origin === null)).toBe(true)
     expect(one(f.raw, 'SELECT COUNT(*) n FROM leads').n).toBe(4)
@@ -276,13 +277,33 @@ describe('migrate(): v8 (reports indexes)', () => {
     const before = { leads: all(f.raw, 'SELECT * FROM leads ORDER BY id'), msgs: all(f.raw, 'SELECT * FROM messages ORDER BY id'), flows: all(f.raw, 'SELECT * FROM flows') }
     expect(keys(f.raw)).toContain('applied_7')
     expect(keys(f.raw)).not.toContain('applied_8')
-    expect(await ensureSchema(f.d1)).toBe(8)
-    expect(one(f.raw, `SELECT value FROM meta WHERE key='schema_version'`).value).toBe('8')
+    expect(await ensureSchema(f.d1)).toBe(LATEST)
+    expect(one(f.raw, `SELECT value FROM meta WHERE key='schema_version'`).value).toBe(String(LATEST))
     expect(keys(f.raw)).toContain('applied_8')
     expect(keys(f.raw)).toEqual(ALL_LOCKS)
     expect(all(f.raw, `SELECT name FROM sqlite_master WHERE name IN ('messages_ts_idx','leads_ad_source_idx','leads_external_idx') ORDER BY name`).map((r) => r.name)).toEqual(['leads_ad_source_idx', 'leads_external_idx', 'messages_ts_idx'])
     expect({ leads: all(f.raw, 'SELECT * FROM leads ORDER BY id'), msgs: all(f.raw, 'SELECT * FROM messages ORDER BY id'), flows: all(f.raw, 'SELECT * FROM flows') }).toEqual(before)
-    expect(await ensureSchema(fakeD1(f.raw).d1)).toBe(8)
+    expect(await ensureSchema(fakeD1(f.raw).d1)).toBe(LATEST)
+    expect(keys(f.raw)).toEqual(ALL_LOCKS)
+  })
+})
+
+describe('migrate(): v9 (broadcasts)', () => {
+  it('v8 -> v9 adds the opt-out columns, template quality, both broadcast tables and the partial indexes; rows preserved', async () => {
+    const f = await legacyV8()
+    populate(f.raw)
+    const before = all(f.raw, 'SELECT * FROM contacts ORDER BY id')
+    expect(keys(f.raw)).not.toContain('applied_9')
+    expect(await ensureSchema(f.d1)).toBe(9)
+    expect(keys(f.raw)).toContain('applied_9')
+    expect(all(f.raw, `SELECT name FROM sqlite_master WHERE name IN ('broadcasts','broadcast_recipients','broadcasts_status','broadcast_recipients_queue','broadcast_recipients_wamid','contacts_opted_out') ORDER BY name`).map((r) => r.name))
+      .toEqual(['broadcast_recipients', 'broadcast_recipients_queue', 'broadcast_recipients_wamid', 'broadcasts', 'broadcasts_status', 'contacts_opted_out'])
+    // partial indexes are accepted and used
+    expect(all<{ sql: string }>(f.raw, `SELECT sql FROM sqlite_master WHERE name='contacts_opted_out'`)[0].sql).toMatch(/WHERE opted_out_at IS NOT NULL/)
+    expect(all<{ detail: string }>(f.raw, `EXPLAIN QUERY PLAN SELECT id FROM contacts WHERE opted_out_at IS NOT NULL`).map((r) => r.detail).join('|')).toMatch(/contacts_opted_out/)
+    expect(all(f.raw, 'SELECT * FROM contacts ORDER BY id').map(({ opted_out_at, opt_out_source, ...c }: any) => c)).toEqual(before)
+    expect(one(f.raw, `SELECT opted_out_at FROM contacts WHERE id=1`).opted_out_at).toBeNull()
+    expect(await ensureSchema(fakeD1(f.raw).d1)).toBe(9)
     expect(keys(f.raw)).toEqual(ALL_LOCKS)
   })
 })
