@@ -10,7 +10,7 @@ export default defineConfig({
   // Login is rate-limited per IP (10 per 15 min), so the later specs share one signed-in storageState instead of each logging in.
   // The onboarding specs exercise setup/login/logout themselves and run first; 'auth' signs in once; 'app' reuses it.
   projects: [
-    { name: 'onboarding', testMatch: /(setup-login|settings-staff)\.spec\.ts/ },
+    { name: 'onboarding', testMatch: /(setup-login|settings-staff|zrecover)\.spec\.ts/ },
     { name: 'auth', testMatch: /auth\.setup\.ts/, dependencies: ['onboarding'] },
     { name: 'app', testMatch: /(inbox|inbox-send-media|crm-leads|push|templates|automation-run|flow-editor|reports-export|whabuzz-connect|zlive|zws)\.spec\.ts/, dependencies: ['auth'], use: { storageState: AUTH_FILE } },
     // Safari engine, for the flow-editor canvas only. PW_WEBKIT overrides the binary when the cached revision differs. Run: npx playwright test --project=auth --project=app-webkit

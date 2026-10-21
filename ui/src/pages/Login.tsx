@@ -1,6 +1,6 @@
 import { safeNext } from '../lib/safeNext'
 import { useState, type FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthCard } from '@/components/AuthCard'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
@@ -42,6 +42,10 @@ export default function Login() {
         {error && <p role="alert" className="break-words text-sm text-danger">{error}</p>}
         <Button type="submit" loading={busy} className="w-full">Log in</Button>
       </form>
+      <p className="mt-4 text-sm text-muted-foreground">
+        <Link to="/recover" className="font-semibold text-accent underline-offset-2 hover:underline">Forgot your password?</Link>{' '}
+        Team members: ask an administrator to reset it from Settings → Team.
+      </p>
     </AuthCard>
   )
 }

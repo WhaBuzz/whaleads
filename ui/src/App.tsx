@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth'
 import ChangePassword from '@/pages/ChangePassword'
 import Inbox from '@/pages/Inbox'
 import Login from '@/pages/Login'
+import Recover from '@/pages/Recover'
 import Setup from '@/pages/Setup'
 import Today from '@/pages/Today'
 import Leads from '@/pages/Leads'
@@ -46,6 +47,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/setup" element={<Setup />} />
+        <Route path="/recover" element={<Recover />} />
         <Route path="*" element={<Navigate to={state.needsSetup ? '/setup' : '/login'} replace />} />
       </Routes>
     )

@@ -1,6 +1,6 @@
-// /api/auth/*: login, logout, me, change password.
-import { clearCookie, createSession, authenticate, guard, withRenewedCookie, type StaffRow } from '../auth'
-import type { Env } from '../db'
+// /api/auth/*: login, logout, me, change password, recover.
+import { clearCookie, createSession, authenticate, guard, setupKeyOk, withRenewedCookie, type StaffRow } from '../auth'
+import { logEvent, type Env } from '../db'
 import { json } from '../leads'
 import { revokeLive } from '../live' // D20
 import { hashPassword, verifyOrDummy } from '../password'
@@ -71,6 +71,50 @@ async function login(req: Request, env: Env): Promise<Response> {
   return json(await mePayload(env, row, s.csrf), 200, { 'set-cookie': s.setCookie })
 }
 
+// D26: self-service recovery for whoever holds SESSION_SECRET (the setup key). That secret already forges sessions and
+// gates /setup, so this adds no privilege. A wrong key and an unknown or inactive email are the same 403 after the same
+// work (one HMAC pair + one staff lookup), so the response never says which part was wrong or whether the email exists.
+const RECOVER_IP = { limit: 5, window: WINDOW }
+const RECOVER_ALL = { limit: 20, window: 3600 }
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+async function recover(req: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
+  const secret = env.SESSION_SECRET
+  if (!secret) return sessionMissing()
+  if (!sameOriginOrNone(req)) return json({ ok: false, error: 'bad_origin' }, 403)
+  const b = await readJson(req)
+  if (!b) return json({ ok: false, error: 'invalid JSON' }, 400)
+  const key = typeof b.setup_key === 'string' ? b.setup_key : ''
+  const email = typeof b.email === 'string' ? b.email.trim().toLowerCase() : ''
+  const next = typeof b.new_password === 'string' ? b.new_password : ''
+  if (!EMAIL.test(email) || email.length > 254) return json({ ok: false, error: 'a valid email is required' }, 400)
+  if (next.length < MIN_PASSWORD) return json({ ok: false, error: `new password must be at least ${MIN_PASSWORD} characters` }, 400)
+  if (next.length > MAX_PASSWORD) return json({ ok: false, error: 'new password is too long' }, 400)
+
+  // Every attempt counts. The global counter caps guessing from many addresses; the cost is that a flood can block
+  // recovery for up to an hour (the ADMIN_KEY bearer reset still works).
+  const limited = (retry: number) => json({ ok: false, error: 'too many attempts, try again later' }, 429, { 'retry-after': String(retry) })
+  if (await hit(env.DB, `recover:ip:${clientIp(req)}`, RECOVER_IP.limit, RECOVER_IP.window)) return limited(RECOVER_IP.window)
+  if (await hit(env.DB, 'recover:all', RECOVER_ALL.limit, RECOVER_ALL.window)) return limited(RECOVER_ALL.window)
+
+  const [keyOk, row] = await Promise.all([
+    setupKeyOk(key, secret),
+    env.DB.prepare(`SELECT id,email,name,role,active FROM staff WHERE email=?`).bind(email).first<StaffRow & { active: number }>(),
+  ])
+  if (!keyOk || !row || !row.active) return json({ ok: false, error: 'invalid_recovery' }, 403)
+
+  const hash = await hashPassword(next)
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE staff SET pw_hash=?, must_change_pw=0, last_login_at=unixepoch() WHERE id=?`).bind(hash, row.id),
+    env.DB.prepare(`DELETE FROM sessions WHERE staff_id=?`).bind(row.id),
+  ])
+  await clear(env.DB, `login:email:${email}`)
+  const s = await createSession(env, row.id, req.headers.get('User-Agent'))
+  revokeLive(env, ctx, { staff: row.id, exceptSid: s.sid })
+  await logEvent(env.DB, 'staff_password_recovered', { id: row.id, by: 'recovery' })
+  return json(await mePayload(env, { ...row, must_change_pw: 0 }, s.csrf), 200, { 'set-cookie': s.setCookie })
+}
+
 async function logout(req: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   const actor = await authenticate(req, env)
   if (actor?.kind === 'staff') {
@@ -130,5 +174,6 @@ export async function handleAuth(req: Request, env: Env, path: string, ctx?: Exe
   if (path === '/api/auth/me' && req.method === 'GET') return me(req, env)
   if (path === '/api/auth/me' && req.method === 'PATCH') return updateProfile(req, env)
   if (path === '/api/auth/password' && req.method === 'POST') return changePassword(req, env, ctx)
+  if (path === '/api/auth/recover' && req.method === 'POST') return recover(req, env, ctx)
   return null
 }

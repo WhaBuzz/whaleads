@@ -31,6 +31,7 @@ Numbers are stable identifiers; code comments refer to them (`// D20: …`). Ret
 | D23 | **Meta errors pass through verbatim** (`source: 'meta'`, rejection reasons shown as-is). No business logic in an adaptor |
 | D24 | **Everyone sees everything.** Two roles (admin, staff); assignment drives ownership, not visibility |
 | D25 | **One contact per phone number** (E.164), merged across form intake and WhatsApp |
+| D26 | **Password recovery uses the setup key, not email.** `/recover` takes `SESSION_SECRET`, which every deployer holds and which already forges sessions, so it adds no privilege and needs no mail (D14) |
 
 ## In scope (v1)
 - **CRM**: configurable stages, sources, tags, owner, notes, activity timeline, won/lost with reason. Intake from website forms (`POST /api/leads`, origin allow-list, honeypot, rate limit, utm/gclid), Meta Lead Ads via WhaBuzz, and manual add. Click-to-WhatsApp attribution from the Meta `referral` object and prefilled reference codes. Reports: leads by source / stage / week; first-response time.

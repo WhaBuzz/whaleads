@@ -12,6 +12,7 @@ Routes, auth and payloads. Staff routes take a session cookie (browser) or, if y
 | `GET /api/setup/status` | none | `{needs_setup, default_country}` (`default_country` from `DEFAULT_COUNTRY`, else `null`) |
 | `POST /api/setup` | setup key (= `SESSION_SECRET`), 5/15 min/IP | first boot: creates the admin, settings and VAPID keys, signs in. 409 once any staff exists |
 | `POST /api/auth/login` | none, 10 attempts/15 min/IP; per email, 5 failures/15 min allowed then 429 (a success clears it) | sets the session cookie, returns `me` + `csrf` |
+| `POST /api/auth/recover` | setup key (= `SESSION_SECRET`), same-origin; 5 attempts/15 min/IP and 20/hour across all IPs | `{setup_key, email, new_password}`: sets a new password for an active account, ends all its sessions, signs in (same body and cookie as login). Wrong key or unknown/inactive email: the same 403 `invalid_recovery`. `must_change_pw` is cleared |
 | `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/password` | session | logout; current staff + settings; change password (revokes other sessions) |
 | `GET /api/leads?limit=`, `POST /api/send` | session (any staff) or `Bearer <ADMIN_KEY>` | staff API |
 | `GET /api/inbox?filter=all\|unread\|mine\|open\|closed&q=&before=&limit=` | session or `Bearer <ADMIN_KEY>` | conversations, unread first then newest; keyset cursor `next_before`; each row has `window_open`, `window_closes_at`; `unread_total`; `connected_number` when the inbox is empty |

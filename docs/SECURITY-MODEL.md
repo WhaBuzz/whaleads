@@ -20,6 +20,7 @@ Only the latest release on `main` gets security fixes. Each deployment is its ow
 | Internet → `/webhooks/meta`, `/webhooks/whabuzz` | Meta, WhaBuzz | HMAC over the raw body, constant-time compare, 300 s timestamp tolerance (WhaBuzz), 401 on failure. Idempotent by wamid. |
 | Internet → `POST /api/leads` | Website forms | Origin must be in `allowed_origins`; 10/min per IP. |
 | Internet → `/api/setup` | The operator, once | Setup key = `SESSION_SECRET`, compared in constant time; 5 per 15 min per IP; locks once any staff row exists. |
+| Internet → `/api/auth/recover` | The operator, when locked out | Setup key = `SESSION_SECRET`, compared in constant time; 5 per 15 min per IP and 20 per hour in total. See [Password recovery](#password-recovery). |
 | Browser → `/api/*` | Staff | Session cookie (HttpOnly, Secure, SameSite=Lax) + `X-CSRF-Token` + same `Origin` on writes; role checks in `require()`; per-route limits. See [ROUTES.md](ROUTES.md). |
 | Script → `/api/*` | Operator tooling | `ADMIN_KEY` bearer (see below). |
 | Worker → outside | Meta Graph, WhaBuzz, push services, flow HTTP nodes, Anthropic | Flow HTTP nodes go through `safeFetch`, which blocks private, loopback and link-local addresses and checks every redirect. Meta media downloads only go to Meta CDN hosts. Push endpoints must be https. |
@@ -40,6 +41,17 @@ It has no CSRF check, because it is never sent by a browser: it is only read fro
 - Keep it in a secret manager.
 - Rotate it with `wrangler secret put ADMIN_KEY`; the old key stops working at once.
 - Leave it unset if no tooling needs it. Without it the bearer path is closed.
+
+## Password recovery
+
+`/recover` resets an active account's password for whoever types the setup key (`SESSION_SECRET`). That is an acceptable recovery credential because holding it already means owning the instance: it signs session cookies (so it can mint one for any staff row) and it is what `/setup` trusts. Recovery adds no privilege; it only gives a locked-out owner a way back without `ADMIN_KEY`. There is no email reset (D14).
+
+- **No user enumeration.** A wrong key and an unknown or inactive email return the same 403 `invalid_recovery` after the same work (one HMAC pair and one staff lookup); no password is hashed on either failure.
+- **Rate limits.** 5 attempts per 15 min per IP and 20 per hour across all IPs, every attempt counted. The global cap means a flood can block recovery for up to an hour; `ADMIN_KEY` or waiting gets you past it. A 64-character hex secret is not guessable at that rate.
+- **Effect.** All of that account's sessions are deleted and its live sockets closed, the per-email login counter is cleared, a `staff_password_recovered` event is written (never the password), and a fresh session is returned.
+- **`must_change_pw` is cleared**, because the owner chose the new password themselves; unlike an admin reset, nobody else has seen it.
+
+Anyone with the secret can recover any account, not only an admin's. That is deliberate: they could forge that account's session anyway.
 
 ## Secrets at rest
 

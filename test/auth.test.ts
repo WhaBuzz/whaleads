@@ -384,3 +384,106 @@ describe('rate limiter and intake', () => {
     expect(count('SELECT COUNT(*) n FROM leads')).toBe(10)
   })
 })
+
+describe('/api/auth/recover (D26)', () => {
+  const NEW = 'a-recovered-password'
+  const recover = (over: Record<string, unknown> = {}, o: Opts = {}) =>
+    call('POST', '/api/auth/recover', { setup_key: SECRET, email: 'admin@example.com', new_password: NEW, ...over }, { ip: o.ip ?? crypto.randomUUID(), ...o })
+  const pwHash = () => (raw.prepare(`SELECT pw_hash FROM staff WHERE email='admin@example.com'`).get() as { pw_hash: string }).pw_hash
+
+  it('wrong key -> 403 invalid_recovery and nothing changes', async () => {
+    const { cookie } = await signedIn()
+    const before = pwHash()
+    const res = await recover({ setup_key: SECRET + 'x' })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ ok: false, error: 'invalid_recovery' })
+    expect(res.headers.get('set-cookie')).toBeNull()
+    expect(pwHash()).toBe(before)
+    expect((await call('GET', '/api/auth/me', undefined, { cookie })).status).toBe(200)
+  })
+  it('unknown email gives the identical 403 body, with the same work and no PBKDF2 either way', async () => {
+    await signedIn()
+    const spy = vi.spyOn(crypto.subtle, 'deriveBits')
+    const wrongKey = await recover({ setup_key: 'nope' })
+    const unknown = await recover({ email: 'nobody@example.com' })
+    expect([wrongKey.status, unknown.status]).toEqual([403, 403])
+    expect(await unknown.json()).toEqual(await wrongKey.json())
+    expect(spy.mock.calls.filter((c) => (c[0] as any).name === 'PBKDF2')).toHaveLength(0)
+  })
+  it('an inactive staff member cannot be recovered', async () => {
+    await signedIn()
+    await addStaff('staff', 'gone@example.com', PASS, 'active=0')
+    const res = await recover({ email: 'gone@example.com' })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ ok: false, error: 'invalid_recovery' })
+  })
+  it('validates the new password and email', async () => {
+    await signedIn()
+    expect((await recover({ new_password: 'short' })).status).toBe(400)
+    expect((await recover({ new_password: 'x'.repeat(201) })).status).toBe(400)
+    expect((await recover({ email: 'not-an-email' })).status).toBe(400)
+  })
+  it('success: signs in, ends every old session, sets the new password, clears must_change_pw, logs an event', async () => {
+    const { cookie } = await signedIn()
+    const other = await login('admin@example.com', PASS)
+    raw.exec(`UPDATE staff SET must_change_pw = 1`)
+    for (let i = 0; i < 3; i++) await login('admin@example.com', 'wrong-password-1', { ip: `192.0.2.${120 + i}` })
+    const res = await recover({ email: 'ADMIN@example.com' })
+    expect(res.status).toBe(200)
+    const body: any = await res.json()
+    expect(body).toMatchObject({ ok: true, staff: { email: 'admin@example.com', role: 'admin', must_change_pw: false } })
+    expect(res.headers.get('set-cookie')).toMatch(/^wl_session=v1\..*HttpOnly; Secure; SameSite=Lax/)
+    expect(count('SELECT COUNT(*) n FROM sessions')).toBe(1)
+    expect((await call('GET', '/api/auth/me', undefined, { cookie })).status).toBe(401)
+    expect((await call('GET', '/api/auth/me', undefined, { cookie: cookieOf(other) })).status).toBe(401)
+    expect((await call('GET', '/api/inbox', undefined, { cookie: cookieOf(res), csrf: body.csrf })).status).toBe(200)
+    expect(count('SELECT COUNT(*) n FROM staff WHERE must_change_pw = 1')).toBe(0)
+    expect(count(`SELECT COUNT(*) n FROM rate_limits WHERE key='login:email:admin@example.com'`)).toBe(0)
+    const ev = raw.prepare(`SELECT payload FROM events WHERE kind='staff_password_recovered'`).all() as { payload: string }[]
+    expect(ev.map((e) => JSON.parse(e.payload))).toEqual([{ id: body.staff.id, by: 'recovery' }])
+    expect(ev[0].payload).not.toContain(NEW)
+    expect((await login('admin@example.com', PASS, { ip: '192.0.2.130' })).status).toBe(401)
+    expect((await login('admin@example.com', NEW, { ip: '192.0.2.131' })).status).toBe(200)
+  })
+  it('works for a non-admin staff row too (the key holder owns the instance)', async () => {
+    await signedIn()
+    await addStaff('staff', 'member@example.com')
+    const res = await recover({ email: 'member@example.com' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ staff: { email: 'member@example.com', role: 'staff' } })
+  })
+  it('per IP: every attempt counts, the 6th from one address is 429 with retry-after', async () => {
+    await signedIn()
+    const codes: number[] = []
+    for (let i = 0; i < 6; i++) codes.push((await recover({ setup_key: 'nope' }, { ip: '192.0.2.140' })).status)
+    expect(codes).toEqual([403, 403, 403, 403, 403, 429])
+    const blocked = await recover({}, { ip: '192.0.2.140' }) // even the right key
+    expect(blocked.status).toBe(429)
+    expect(blocked.headers.get('retry-after')).toBe('900')
+    expect((await login('admin@example.com', PASS, { ip: '192.0.2.141' })).status).toBe(200)
+  })
+  it('global: the 21st attempt in an hour from any address is 429', async () => {
+    await signedIn()
+    const codes: number[] = []
+    for (let i = 0; i < 21; i++) codes.push((await recover({ setup_key: 'nope' }, { ip: `198.51.100.${i}` })).status)
+    expect(codes).toEqual([...Array(20).fill(403), 429])
+    const blocked = await recover({}, { ip: '198.51.100.200' })
+    expect(blocked.status).toBe(429)
+    expect(blocked.headers.get('retry-after')).toBe('3600')
+    raw.exec(`UPDATE rate_limits SET window_start = window_start - 3601 WHERE key='recover:all'`)
+    expect((await recover({}, { ip: '198.51.100.201' })).status).toBe(200)
+  })
+  it('refuses a cross-origin browser request', async () => {
+    await signedIn()
+    const before = pwHash()
+    expect((await recover({}, { origin: 'https://evil.example.org' })).status).toBe(403)
+    expect(pwHash()).toBe(before)
+  })
+  it('503 when SESSION_SECRET is unset', async () => {
+    await signedIn()
+    delete env.SESSION_SECRET
+    const res = await recover()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ error: 'session_secret_missing' })
+  })
+})

@@ -22,6 +22,8 @@ The new repository is connected to Cloudflare's Workers Builds, so pushing to it
 4. **Connect WhatsApp.** Settings, WhatsApp: connect with WhaBuzz, or enter your own Meta Cloud API app. See [ADAPTORS.md](ADAPTORS.md).
 5. **Add staff.** Settings, Team. Each person signs in, then turns on notifications from Settings, My profile (web push; on iPhone, add the app to the Home Screen first).
 
+**Locked out?** Open `/recover` ("Forgot your password?" on the login page), enter the same `SESSION_SECRET` as the setup key, your email and a new password. It signs out your other sessions and signs you in. Team members ask an admin to reset theirs from Settings, Team. For scripts, `ADMIN_KEY` with `POST /api/staff/:id/reset-password` remains the alternative.
+
 Then point your website forms at `POST https://<your-host>/api/leads` (see [API.md](API.md)) and add your site under Settings, Lead forms so the origin is allowed.
 
 ## Option 2: from the command line
@@ -48,7 +50,7 @@ npx wrangler secret put SESSION_SECRET # paste: openssl rand -hex 32
 
 | Name | Kind | Needed | Purpose |
 |---|---|---|---|
-| `SESSION_SECRET` | secret | yes | Signs sessions, encrypts the saved WhatsApp connection and push keys, and is the key you type on `/setup`. Changing it makes the saved connection unreadable (Health shows `adaptor_error`, `/webhooks/whabuzz` answers 503); save the connection again. |
+| `SESSION_SECRET` | secret | yes | Signs sessions, encrypts the saved WhatsApp connection and push keys, and is the key you type on `/setup` and `/recover`. Changing it makes the saved connection unreadable (Health shows `adaptor_error`, `/webhooks/whabuzz` answers 503); save the connection again. |
 | `ADMIN_KEY` | secret | no | Bearer key for scripts; acts as admin. Unset means off. |
 | `INSTANCE_NAME` | var | no | Default business name before you set one. Template value: `WhaLeads`. |
 | `ALLOWED_ORIGINS` | var | no | Comma list of form origins. Settings, Lead forms overrides it. Template value: empty. |

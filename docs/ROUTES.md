@@ -27,6 +27,7 @@ Every route the Worker serves (`/api/*`, `/webhooks/*`). The SPA and static file
 | GET `/api/setup/status` | public | - | - | |
 | POST `/api/setup` | setup key (= `SESSION_SECRET`), same-origin | Origin | 5 per 15 min per IP | Locked once any staff row exists |
 | POST `/api/auth/login` | public | - | 10 per 15 min per IP; 5 per email | |
+| POST `/api/auth/recover` | setup key (= `SESSION_SECRET`), same-origin | Origin | 5 per 15 min per IP; 20 per hour across all IPs (every attempt counts) | D26. Wrong key and unknown/inactive email are the same 403 `invalid_recovery`. Ends all of that staff's sessions and sockets, then signs in |
 | POST `/api/auth/logout` | session | yes | - | Deletes the session and closes its sockets |
 | GET `/api/auth/me` | session (must_change allowed) | - | - | |
 | PATCH `/api/auth/me` | session | yes | - | |
