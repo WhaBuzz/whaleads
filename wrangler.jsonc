@@ -18,7 +18,8 @@
   "d1_databases": [{ "binding": "DB", "database_name": "whaleads-db" }],
   "vars": {
     "INSTANCE_NAME": "WhaLeads",
-    "ALLOWED_ORIGINS": "",
+    // Website-form origins are set in the app (Settings, Lead forms). Do not add ALLOWED_ORIGINS here:
+    // the Deploy button asks the deployer to fill every empty var, and this one has no sensible value before setup.
     // The one-click "Connect with WhaBuzz" button (Settings, WhatsApp). Set it to "" to hide the button and enter keys by hand.
     "WHABUZZ_CONNECT_BASE": "https://app.whabuzz.com"
   },

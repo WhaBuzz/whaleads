@@ -77,7 +77,7 @@ if (cfg.main !== 'src/index.ts') fail('wrangler.jsonc', 'main must be src/index.
 const vars = cfg.vars ?? {}
 for (const [k, v] of Object.entries(vars)) {
   if (/^META_|TOKEN|SECRET|KEY|PASSWORD/i.test(k)) fail('wrangler.jsonc', `vars.${k}: adaptor config lives in D1 and secrets never go in vars`)
-  if (k === 'ALLOWED_ORIGINS' && v !== '') fail('wrangler.jsonc', 'vars.ALLOWED_ORIGINS must be empty (set in Settings)')
+  if (k === 'ALLOWED_ORIGINS') fail('wrangler.jsonc', 'vars.ALLOWED_ORIGINS must not be in the template: the Deploy button makes the deployer fill empty vars (set origins in Settings)')
   if (k === 'INSTANCE_NAME' && v !== 'WhaLeads') fail('wrangler.jsonc', 'vars.INSTANCE_NAME must be "WhaLeads"')
 }
 

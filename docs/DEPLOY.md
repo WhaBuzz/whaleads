@@ -53,7 +53,7 @@ npx wrangler secret put SESSION_SECRET # paste: openssl rand -hex 32
 | `SESSION_SECRET` | secret | yes | Signs sessions, encrypts the saved WhatsApp connection and push keys, and is the key you type on `/setup` and `/recover`. Changing it makes the saved connection unreadable (Health shows `adaptor_error`, `/webhooks/whabuzz` answers 503); save the connection again. |
 | `ADMIN_KEY` | secret | no | Bearer key for scripts; acts as admin. Unset means off. |
 | `INSTANCE_NAME` | var | no | Default business name before you set one. Template value: `WhaLeads`. |
-| `ALLOWED_ORIGINS` | var | no | Comma list of form origins. Settings, Lead forms overrides it. Template value: empty. |
+| `ALLOWED_ORIGINS` | var | no | Comma list of form origins. Settings, Lead forms overrides it. Not in the template on purpose: the Deploy button asks for a value for every empty var. |
 | `WHABUZZ_BASE_URL` | var | no | WhaBuzz API host. https on `*.whabuzz.com` only; `http://127.0.0.1` or `localhost` for local mocks. |
 | `META_GRAPH_VERSION`, `META_APP_ID`, `META_WABA_ID`, `META_PHONE_NUMBER_ID` | vars | no | Legacy Cloud API path. Not needed once an adaptor is saved in Settings. |
 | `META_SYSTEM_TOKEN`, `META_APP_SECRET`, `WEBHOOK_VERIFY_TOKEN` | secrets | no | Legacy Cloud API path, same as above. |
