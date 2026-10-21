@@ -15,6 +15,8 @@ async function signInAsAdmin(page: Page) {
     await page.getByLabel('Email').fill(ADMIN)
     await page.getByLabel('Password').fill(PASSWORD)
     await page.getByRole('button', { name: 'Create workspace' }).click()
+    await page.waitForURL(/\/settings\/whatsapp$/)
+    await page.goto('/')
   } else {
     await page.getByLabel('Email').fill(ADMIN)
     await page.getByLabel('Password').fill(PASSWORD)
@@ -51,6 +53,10 @@ test('admin adds staff; temp password logs in, forces a change, lands in the app
   if ((await fields.count()) > 2) await fields.nth(2).fill('a brand new passphrase')
   await page.getByRole('button', { name: /change|save|update/i }).click()
   await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()
+
+  // no number connected yet: staff are told to ask an admin and get no button
+  await expect(page.getByTestId('connect-banner')).toContainText('Ask an administrator to connect a WhatsApp number.')
+  await expect(page.getByTestId('connect-whatsapp')).toHaveCount(0)
 
   // staff sees only their own settings
   await page.goto('/settings')

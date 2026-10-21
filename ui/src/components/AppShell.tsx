@@ -5,10 +5,12 @@ import { UnreadProvider } from '@/lib/unread'
 import { BottomTabBar } from './BottomTabBar'
 import { Sidebar } from './Sidebar'
 import { InstallAppHint } from './InstallAppHint'
+import { ConnectBanner } from './ConnectBanner'
+import { ConnectionProvider } from '@/lib/connection'
 
 /** The signed-in shell. D20: owns the one live socket for this tab; `data-live` reports its state (open | connecting | closed). */
 export function AppShell({ me }: { me: Me }) {
-  return <LiveProvider><Shell me={me} /></LiveProvider>
+  return <LiveProvider><ConnectionProvider me={me}><Shell me={me} /></ConnectionProvider></LiveProvider>
 }
 
 function Shell({ me }: { me: Me }) {
@@ -23,6 +25,7 @@ function Shell({ me }: { me: Me }) {
         <header className="flex min-h-[48px] items-center border-b bg-surface px-4 md:hidden">
           <span className="truncate text-base font-bold">{me.business_name}</span>
         </header>
+        <ConnectBanner />
         <InstallAppHint />
         {full
           ? <main className="min-h-0 flex-1 pb-[calc(48px+env(safe-area-inset-bottom))] md:pb-0"><Outlet /></main>

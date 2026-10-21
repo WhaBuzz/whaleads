@@ -11,6 +11,8 @@ test('sign in once and save the session', async ({ page }) => {
     await page.getByLabel('Email').fill('admin@example.com')
     await page.getByLabel('Password').fill('correct horse battery')
     await page.getByRole('button', { name: 'Create workspace' }).click()
+    await page.waitForURL(/\/settings\/whatsapp$/)
+    await page.goto('/')
   } else {
     await page.getByLabel('Email').fill('admin@example.com')
     await page.getByLabel('Password').fill('correct horse battery')

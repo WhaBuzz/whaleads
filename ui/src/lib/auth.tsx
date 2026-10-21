@@ -8,6 +8,7 @@ export interface Me {
   business_name: string
   default_country: string | null
   timezone: string
+  whatsapp_connected?: boolean
 }
 type State = { status: 'loading' } | { status: 'error'; message: string } | { status: 'anon'; needsSetup: boolean } | { status: 'in'; me: Me }
 

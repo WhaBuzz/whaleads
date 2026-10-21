@@ -36,7 +36,7 @@ The screenshots use made-up example data.
 1. **Deploy.** Press the button, paste a `SESSION_SECRET` (32+ random characters, `openssl rand -hex 32`) and keep a copy.
 2. **Open** the `workers.dev` address the deploy ends on. No address shown? A new Cloudflare account has no `workers.dev` subdomain yet: open the Worker, Settings, Domains & Routes, add `workers.dev`, and pick your subdomain when asked.
 3. **Set up.** `/setup` asks for that secret once, then creates the first admin and locks itself.
-4. **Connect WhatsApp.** Settings, WhatsApp: press "Connect with WhaBuzz", sign in, pick the number, and you are back with keys in place. Or enter the keys of your own Meta Cloud API app. The flow, its routes and the `WHABUZZ_BASE_URL` / `WHABUZZ_CONNECT_BASE` variables are in [ADAPTORS](docs/ADAPTORS.md).
+4. **Connect WhatsApp.** Settings, WhatsApp: press "Connect with WhaBuzz", sign in, pick the number, and you are back with keys in place. Or enter the keys of your own Meta Cloud API app. The app itself prompts for this: the banner at the top takes you there. The flow, its routes and the `WHABUZZ_BASE_URL` / `WHABUZZ_CONNECT_BASE` variables are in [ADAPTORS](docs/ADAPTORS.md).
 5. **Add staff.** Settings, Team.
 
 **Locked out?** Open `/recover` ("Forgot your password?" on the login page) and use your setup key, the `SESSION_SECRET` you kept from step 1. Team members ask an admin to reset theirs from Settings, Team.

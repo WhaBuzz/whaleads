@@ -1,5 +1,6 @@
 // /api/auth/*: login, logout, me, change password, recover.
 import { clearCookie, createSession, authenticate, guard, setupKeyOk, withRenewedCookie, type StaffRow } from '../auth'
+import { adaptorConfigured } from '../adaptors'
 import { logEvent, type Env } from '../db'
 import { json } from '../leads'
 import { revokeLive } from '../live' // D20
@@ -39,6 +40,7 @@ export async function mePayload(env: Env, staff: StaffRow, csrf: string) {
     default_country: s.default_country,
     timezone: s.timezone,
     vapid_public: s.vapid_public,
+    whatsapp_connected: await adaptorConfigured(env),
   }
 }
 

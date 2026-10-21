@@ -1,12 +1,14 @@
 import { CalendarCheck, MessageSquare } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { ConnectButton } from '@/components/ConnectButton'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { PageHeader } from '@/components/PageHeader'
 import { LeadRow, LeadRowSkeleton } from '@/components/leads/LeadRow'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/lib/auth'
+import { useConnection } from '@/lib/connection'
 import { displayName, shortTime } from '@/lib/inbox'
 import type { LeadT } from '@/lib/crm'
 import { useLoad } from '@/lib/useLoad'
@@ -34,6 +36,7 @@ export default function Today() {
   const { state: auth } = useAuth()
   const tz = auth.status === 'in' ? auth.me.timezone : 'UTC'
   const { state, reload } = useLoad<TodayT>('/api/today')
+  const { connected, isAdmin } = useConnection()
 
   if (state.status === 'loading') {
     return (
@@ -52,7 +55,9 @@ export default function Today() {
   return (
     <>
       <PageHeader title="Today" subtitle="Follow-ups due and new leads" />
-      {total === 0 ? (
+      {total === 0 && !connected ? (
+        <EmptyState icon={CalendarCheck} title="Connect a WhatsApp number to get started" body={isAdmin ? 'Leads and chats show up here once your number is connected.' : 'Ask an administrator to connect a WhatsApp number. Leads and chats show up here after that.'} action={isAdmin ? <ConnectButton /> : undefined} />
+      ) : total === 0 ? (
         <EmptyState icon={CalendarCheck} title="Nothing to follow up yet" body="Nothing is overdue or due today, and there are no new leads or unanswered chats." />
       ) : (
         <>

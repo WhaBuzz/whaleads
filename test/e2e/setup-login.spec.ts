@@ -14,8 +14,24 @@ test('setup -> Today shell -> logout -> login', async ({ page }) => {
   await page.getByLabel('Password').fill(PASSWORD)
   await page.getByRole('button', { name: 'Create workspace' }).click()
 
+  // a fresh workspace has no number: setup sends the admin straight to connecting one, with no banner on that page
+  await expect(page).toHaveURL(/\/settings\/whatsapp$/)
+  await expect(page.getByRole('heading', { name: 'WhatsApp' })).toBeVisible()
+  await expect(page.getByText('No WhatsApp number is connected yet')).toBeVisible()
+  await expect(page.getByTestId('connect-banner')).toHaveCount(0)
+
+  // everywhere else the banner is there, with a button back to the settings page
+  await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()
-  await expect(page.getByText('Nothing to follow up yet')).toBeVisible()
+  await expect(page.getByTestId('connect-banner')).toContainText("No WhatsApp number is connected. Messages can't arrive or be sent yet.")
+  await expect(page.getByText('Connect a WhatsApp number to get started')).toBeVisible()
+  await page.goto('/inbox')
+  await expect(page.getByTestId('connect-banner')).toBeVisible()
+  await expect(page.getByText('Connect a WhatsApp number', { exact: true })).toBeVisible()
+  await page.getByTestId('connect-banner').getByRole('link', { name: 'Connect WhatsApp' }).click()
+  await expect(page).toHaveURL(/\/settings\/whatsapp$/)
+  await expect(page.getByTestId('connect-banner')).toHaveCount(0)
+  await page.goto('/')
 
   await page.getByRole('button', { name: 'Log out' }).first().click()
   await expect(page).toHaveURL(/\/login$/)

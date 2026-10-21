@@ -1,6 +1,7 @@
 import { Inbox as InboxIcon, MessageSquare, Search } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { ConnectButton } from '@/components/ConnectButton'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { ConversationRow } from '@/components/inbox/ConversationRow'
@@ -8,6 +9,7 @@ import { ThreadView } from '@/components/inbox/ThreadView'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
+import { useConnection } from '@/lib/connection'
 import { useLiveEvents, useLiveOpen } from '@/lib/live'
 import { applyConversation } from '@/lib/liveReduce'
 import { mergeFirstPage, showPhone, type ConvRow, type InboxList } from '@/lib/inbox'
@@ -29,6 +31,7 @@ function ListSkeleton() {
 
 export default function Inbox() {
   const { contactId } = useParams()
+  const { connected, isAdmin } = useConnection()
   const { set: setUnread, unread } = useUnread()
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all')
   const [q, setQ] = useState('')
@@ -125,6 +128,7 @@ export default function Inbox() {
               <div className="p-4">
                 {filtered
                   ? <EmptyState icon={InboxIcon} title="No matching conversations" body="Try a different filter or search." />
+                  : !connected ? <EmptyState icon={InboxIcon} title="Connect a WhatsApp number" body={isAdmin ? 'Conversations appear here once your number is connected.' : 'Ask an administrator to connect a WhatsApp number. Conversations appear here after that.'} action={isAdmin ? <ConnectButton /> : undefined} />
                   : <EmptyState icon={InboxIcon} title="No conversations yet" body={number ? `Messages sent to ${showPhone(number.replace(/\D/g, ''))} will appear here.` : 'Messages sent to your connected WhatsApp number will appear here.'} />}
               </div>
             ) : (

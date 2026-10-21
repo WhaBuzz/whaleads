@@ -96,6 +96,7 @@ describe('/api/setup', () => {
     expect(res.headers.get('set-cookie')).toMatch(/^wl_session=v1\.[\w-]+\.[\w-]+; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=2592000$/)
     expect(body).toMatchObject({ ok: true, staff: { name: 'Test Admin', email: 'admin@example.com', role: 'admin', must_change_pw: false }, business_name: 'Example Co', default_country: 'IN', timezone: 'Asia/Kolkata' })
     expect(body.vapid_public).toMatch(/^[\w-]{87}$/) // raw P-256 point, base64url
+    expect(body.whatsapp_connected).toBe(false) // fresh instance: no adaptor row, no env Cloud API vars
     const st = raw.prepare('SELECT pw_hash FROM staff').get() as any
     expect(st.pw_hash).toMatch(/^pbkdf2-sha256\$100000\$/)
     const priv = JSON.parse((raw.prepare(`SELECT value FROM settings WHERE key='vapid_private_enc'`).get() as any).value)

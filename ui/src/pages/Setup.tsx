@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AuthCard } from '@/components/AuthCard'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
@@ -16,6 +17,7 @@ const MESSAGES: Record<string, string> = {
 
 export default function Setup() {
   const { signedIn, reload } = useAuth()
+  const navigate = useNavigate()
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   const zones = useMemo(() => timezoneList(browserTz), [browserTz])
   const [f, setF] = useState({ setup_key: '', business_name: '', default_country: 'IN', timezone: browserTz, name: '', email: '', password: '' })
@@ -39,6 +41,7 @@ export default function Setup() {
         admin: { name: f.name, email: f.email, password: f.password },
       }
       signedIn(await api<Me>('/api/setup', { method: 'POST', body }))
+      navigate('/settings/whatsapp', { replace: true }) // a fresh workspace has no number yet: go straight to connecting one
     } catch (err) {
       const msg = (err as Error).message
       setError(MESSAGES[msg] ?? (err instanceof ApiError && err.status === 429 ? 'Too many attempts. Wait a few minutes and try again.' : msg))

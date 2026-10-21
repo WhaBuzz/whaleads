@@ -51,6 +51,12 @@ export async function resolveActive(env: Env): Promise<Resolved | null> {
   return null
 }
 
+/** Cheap "is any number configured" for the app shell: a row exists or the env Cloud API vars are set. No decrypt, no upstream call. */
+export async function adaptorConfigured(env: Env): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT 1 AS x FROM adaptor_config WHERE id=1`).first()
+  return !!row || envCloudConfig(env) !== null
+}
+
 /**
  * True when a WhaBuzz webhook secret is saved. An unreadable config counts as "secret present", so without a pending
  * connect the unsigned verify ping is refused; a valid pending connect (stored encrypted separately) still allows it.
