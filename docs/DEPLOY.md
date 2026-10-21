@@ -17,7 +17,7 @@ The new repository is connected to Cloudflare's Workers Builds, so pushing to it
 ### First run
 
 1. **Deploy** with the button. Paste a `SESSION_SECRET` of 32+ random characters (`openssl rand -hex 32`) and keep a copy.
-2. **Open** the `workers.dev` URL the deploy ends on. A fresh instance sends you to `/setup`.
+2. **Open** the `workers.dev` URL the deploy ends on. A fresh instance sends you to `/setup`. If the deploy ends with no URL, the account has no `workers.dev` subdomain yet (new accounts pick one on first use): open the Worker, Settings, Domains & Routes, add `workers.dev`, choose a subdomain, and the address appears.
 3. **Set up.** Enter the same `SESSION_SECRET` as the setup key, then your business name, your name, email and a password (10+ characters). This creates the first admin and locks `/setup`.
 4. **Connect WhatsApp.** Settings, WhatsApp: connect with WhaBuzz, or enter your own Meta Cloud API app. See [ADAPTORS.md](ADAPTORS.md).
 5. **Add staff.** Settings, Team. Each person signs in, then turns on notifications from Settings, My profile (web push; on iPhone, add the app to the Home Screen first).
