@@ -58,7 +58,7 @@ Prefer the command line? [docs/DEPLOY.md](docs/DEPLOY.md) has `wrangler deploy` 
 
 ## Where WhaLeads stops
 
-Several numbers in one deployment, multi-client hosting and voice are out of scope. Need many numbers or many clients? Use WhaBuzz directly.
+Several numbers in one deployment, multi-client hosting and voice are out of scope. Broadcasts stay basic: one approved template to leads picked by tag and stage. Scheduled or recurring sends, richer segments, A/B tests and analytics are not planned here. Need those, many numbers or many clients? Use WhaBuzz directly.
 
 ## License
 

@@ -44,7 +44,7 @@ Your own instance's `wrangler.jsonc` (account id, routes, database id) belongs i
 - Tests for new behaviour, in `test/` (unit, `*.test.ts`) or `test/e2e/` when the change is visible in the browser.
 - New UI needs loading, empty and error states, and has to work at phone width (360 px) and desktop.
 - No new runtime dependencies without a reason in the description. No analytics, telemetry or calls to third parties other than the WhatsApp adaptors and the optional AI key the owner enters.
-- Out of scope for now (see the README): broadcasts, several numbers per deployment, email, voice.
+- Out of scope for now (see the README): scheduled or recurring broadcasts, segments beyond tags and stage, several numbers per deployment, email, voice. Basic broadcasts (one approved template to tag-picked leads, paced, opt-outs honoured) are in.
 - Security problems: do not open an issue. See [SECURITY.md](SECURITY.md).
 
 By contributing you agree your work is licensed under Apache-2.0.
