@@ -2,15 +2,7 @@
 
 A free WhatsApp lead inbox, CRM and automation builder for a small team that takes enquiries on one WhatsApp number.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WhaBuzz/whaleads)
-
-**Before you press it, have these ready (about five minutes):**
-
-- A Cloudflare account. The Workers Free plan is enough. If it is new, pick your `workers.dev` subdomain first (Workers & Pages, then the prompt at the top), or the deploy ends with no address.
-- R2 turned on in that account (R2, then Enable). Cloudflare asks for a payment method to switch it on, even though the free allowance covers WhaLeads. Don't want R2? Delete the `r2_buckets` block in `wrangler.jsonc` of your copy and media is proxied live from Meta instead.
-- A GitHub or GitLab account. The button copies this repository into it. D1, the Durable Object and the cron are created for you; nothing to prepare.
-- A session secret, generated and saved somewhere safe: `openssl rand -hex 32`. You paste it on the deploy page, then type the same value on `/setup` to create the first admin. It is also the only way back in if you forget your password. Lose it and you redeploy.
-- A WhatsApp number to connect afterwards, through WhaBuzz or your own Meta Cloud API app.
+**What you get:**
 
 - A shared inbox with the 24 hour reply window shown on every chat, and leads with stages, tags, owners, notes and reports.
 - Click-to-WhatsApp ads are attributed: the ad's id, headline and link are saved on the lead.
@@ -22,6 +14,16 @@ A free WhatsApp lead inbox, CRM and automation builder for a small team that tak
 - Your data stays in your Cloudflare account. No telemetry, no phone-home. Apache-2.0.
 - Connect your WhatsApp number through WhaBuzz in one click (Settings, WhatsApp, "Connect with WhaBuzz"), or bring your own Meta Cloud API app.
 - One number, one team, self-hosted: WhaLeads. Many numbers or many clients: use WhaBuzz directly.
+
+**Before you press Deploy, have these ready (about five minutes):**
+
+- A Cloudflare account. The Workers Free plan is enough. If it is new, pick your `workers.dev` subdomain first (Workers & Pages, then the prompt at the top), or the deploy ends with no address.
+- R2 turned on in that account (R2, then Enable). Cloudflare asks for a payment method to switch it on, even though the free allowance covers WhaLeads. Don't want R2? Delete the `r2_buckets` block in `wrangler.jsonc` of your copy and media is proxied live from Meta instead.
+- A GitHub or GitLab account. The button copies this repository into it. D1, the Durable Object and the cron are created for you; nothing to prepare.
+- A session secret, generated and saved somewhere safe: `openssl rand -hex 32`. You paste it on the deploy page, then type the same value on `/setup` to create the first admin. It is also the only way back in if you forget your password. Lose it and you redeploy.
+- A WhatsApp number to connect afterwards, through WhaBuzz or your own Meta Cloud API app.
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WhaBuzz/whaleads)
 
 ![Inbox with the reply window](docs/screenshots/inbox-1280.png)
 
